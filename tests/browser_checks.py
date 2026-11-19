@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import socket
 import subprocess
 import sys
@@ -560,6 +561,137 @@ def test_legacy_texts_keep_rendering(r: Runner) -> None:
         page.wait_for_selector(".player-card")
         assert page.locator(".player-card").count() == 2
         assert page.locator(".player-card .card").count() == 1
+
+
+def test_connection_lost_chip_after_delay(r: Runner) -> None:
+    """AC-14: the chip waits ~4 s; normal streams never warn (spec 6.6)."""
+    view = r.create(("Ann", "Bob"))
+    with r.page() as page:
+        page.route("**/events*", lambda route: route.abort())  # force reconnect errors
+        r.join(page, view, 0)
+        chip = page.locator("#connection-chip")
+        assert chip.is_hidden()
+        page.wait_for_timeout(1500)
+        assert chip.is_hidden(), "chip must not appear inside the 4 s grace period"
+        page.wait_for_selector("#connection-chip:not([hidden])", timeout=8000)
+        assert "connection" in chip.inner_text().lower()
+
+
+def test_stale_move_toast_and_reload(r: Runner) -> None:
+    """AC-21: a 409 shows a translated toast and reloads state, never a double draw."""
+    view = r.create(("Ann", "Bob"))
+    with r.page() as page:
+        page.route("**/events*", lambda route: route.abort())  # isolate from SSE catch-up
+        r.join(page, view, 0)
+        page.wait_for_selector('[data-action="hit"]')
+        state = r.load(view["id"])
+        state["deck"] = [3, 4]  # another device writes first: version +1
+        r.store(view["id"], state)
+        page.locator('[data-action="hit"]').click()
+        page.wait_for_selector("#toast:not([hidden])", timeout=10000)
+        assert page.locator("#dock-deck").inner_text().strip() == "Deck: 2"
+        assert page.locator(".player-card .card").count() == 0, "stale click drew a card"
+
+
+def test_invite_links_copy_qr_and_share(r: Runner) -> None:
+    """AC-23: fragment tokens, client-side QR, copy feedback, conditional share."""
+    with r.page() as page:
+        page.goto(r.base_url + "/")
+        r.ready(page)
+        page.locator("#names").fill("Ann, Bob")
+        page.locator("#btn-start").click()
+        page.wait_for_selector("#invite-dialog[open]")
+        game_id = page.evaluate("() => new URL(location.href).searchParams.get('game')")
+        assert r.get(game_id)["id"] == game_id
+        rows = page.locator(".invite-row")
+        assert rows.count() == 2
+        own_link = rows.nth(0).locator("input").input_value()
+        other = rows.nth(1)
+        link = other.locator("input").input_value()
+        assert "?game=" + game_id in link
+        assert re.search(r"#seat=1&token=[A-Za-z0-9_-]{16,}", link)
+        assert re.search(r"#seat=0&token=[A-Za-z0-9_-]{16,}", own_link)
+        assert link.split("&token=")[1] != own_link.split("&token=")[1]
+        assert page.evaluate("() => location.hash") == "", "token left in the address bar"
+
+        other.locator('[data-action="qr"]').click()
+        img = other.locator(".qr-slot img")
+        img.wait_for(state="visible")
+        assert img.get_attribute("src").startswith("data:image")
+        assert img.get_attribute("alt")
+
+        other.locator('[data-action="copy"]').click()
+        page.wait_for_selector("#toast:not([hidden])")
+        expected = 1 if page.evaluate("() => !!navigator.share") else 0
+        assert page.locator('[data-action="share"]').count() == expected
+
+
+def test_keyboard_shortcuts_and_guards(r: Runner) -> None:
+    """AC-25: h/s/target keys work; inputs and open dialogs swallow shortcuts."""
+    view = r.create(("Ann", "Bob"))
+    state = r.load(view["id"])
+    state["deck"] = [5, 6, 7]
+    r.store(view["id"], state)
+    with r.page() as page:
+        r.join(page, view, 0)
+        page.wait_for_selector('[data-action="hit"]')
+
+        page.keyboard.press("?")
+        page.wait_for_selector("#rules-dialog[open]")
+        page.keyboard.press("h")
+        assert page.locator(".player-card .card").count() == 0, "dialog did not guard 'h'"
+        page.locator("#rules-dialog .dialog-close").click()
+
+        page.evaluate(
+            """() => {
+                 const input = document.createElement('input');
+                 input.id = 'focus-probe';
+                 input.style.cssText = 'position:fixed;top:0;z-index:9999';
+                 document.body.appendChild(input);
+                 input.focus();
+               }"""
+        )
+        page.keyboard.press("h")
+        assert page.locator(".player-card .card").count() == 0, "input did not guard 'h'"
+        page.evaluate("() => document.querySelector('#focus-probe').remove()")
+
+        page.keyboard.press("h")
+        page.wait_for_function("() => document.querySelectorAll('.player-card .card').length === 1")
+        page.keyboard.press("s")
+        page.wait_for_selector(".player-card .status-badge.status-stayed")
+
+        pending = r.create(("Ann", "Bob"))
+        pstate = r.load(pending["id"])
+        pstate["pending"] = [{"kind": "freeze", "by": 0, "target": None, "source": "hit"}]
+        pstate["discard"].append("freeze")
+        r.store(pending["id"], pstate)
+        r.join(page, pending, 0)
+        page.wait_for_selector('[data-action="target"]')
+        page.keyboard.press("1")
+        page.wait_for_selector(".player-card:nth-child(2) .status-badge.status-stayed")
+
+
+def test_topbar_icon_labels_and_sound_pressed(r: Runner) -> None:
+    """AC-15: icon-only buttons, translated aria-labels and sound aria-pressed."""
+    with r.page() as page:
+        page.goto(r.base_url + "/")
+        r.ready(page)
+        for selector in ("#btn-rules", "#btn-language", "#btn-sound", "#btn-theme"):
+            button = page.locator(selector)
+            assert button.get_attribute("aria-label")
+            assert button.get_attribute("title")
+            assert button.inner_text().strip() in {"❓", "🌐", "🔊", "🔇", "◐", "☀", "☾"}
+        sound = page.locator("#btn-sound")
+        assert sound.get_attribute("aria-pressed") == "true"
+        sound.click()
+        assert sound.get_attribute("aria-pressed") == "false"
+        assert "aus" in sound.get_attribute("aria-label").lower() or "off" in (
+            sound.get_attribute("aria-label").lower()
+        )
+        page.locator("#btn-language").click()
+        assert page.evaluate("() => document.documentElement.lang") == "de"
+        assert page.locator("#btn-rules").get_attribute("aria-label")
+        assert page.locator("#btn-sound").get_attribute("aria-label")
 
 
 def run_tests(runner: Runner) -> list[tuple[str, Exception]]:

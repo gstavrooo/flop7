@@ -151,6 +151,41 @@ def build_patch_body(owner_id: str, image_url: str, credential_id: str | None) -
     return {"image": image_config(owner_id, image_url, credential_id), "autoDeployTrigger": "off"}
 
 
+def latest_deploy(api: Api, service_id: str) -> dict[str, Any]:
+    """The newest deploy record; list responses wrap each deploy with a cursor."""
+    deploys = entries(api("GET", f"/services/{service_id}/deploys?limit=1", None))
+    if not deploys:
+        raise RenderError(f"service {service_id} has no deploys")
+    return deploys[0]
+
+
+def trigger_deploy(
+    api: Api,
+    service_id: str,
+    image_url: str,
+    *,
+    max_polls: int = 10,
+    interval: int = 3,
+    sleep: Callable[[int], None] = time.sleep,
+) -> str:
+    """Trigger the exact image and return its deploy ID.
+
+    Render answers 201 with a deploy body, but 202 (queued) has no body at all;
+    in that case we wait for a new deploy record to appear (spec 9.2 step 4).
+    """
+    previous = latest_deploy(api, service_id).get("id")
+    triggered = unwrap(api("POST", f"/services/{service_id}/deploys?trigger=true", {"imageUrl": image_url}))
+    if triggered.get("id"):
+        return str(triggered["id"])
+    for attempt in range(1, max_polls + 1):
+        deploy_id = latest_deploy(api, service_id).get("id")
+        if deploy_id and deploy_id != previous:
+            return str(deploy_id)
+        if attempt < max_polls:
+            sleep(interval)
+    raise RenderError("deploy trigger returned no ID and no new deploy appeared")
+
+
 def service_url(service: dict[str, Any]) -> str:
     """The public URL: current API uses serviceDetails.url, older one serviceUrl."""
     url = service.get("serviceUrl") or service.get("serviceDetails", {}).get("url")
@@ -219,8 +254,7 @@ def main() -> None:
         service_id = created["id"]
         print(f"render: created service {service_id}", flush=True)
 
-    triggered = unwrap(call("POST", f"/services/{service_id}/deploys?trigger=true", {"imageUrl": image_url}))
-    deploy_id = triggered["id"]
+    deploy_id = trigger_deploy(call, service_id, image_url)
     service = wait_for_live(call, service_id, deploy_id)
     url = service_url(service)
 

@@ -139,10 +139,12 @@ with `.trivyignore`), `browser-test` (Playwright/Chromium on pinned `ubuntu-24.0
 desktop, no screenshots/traces), `lint` (ruff, shellcheck, actionlint, zizmor offline) and
 `gitleaks` (whole history). All actions and tool images are pinned by SHA/digest.
 
-Branches are trunk-based: squash-merge only, linear history, no direct pushes to `main`. After
-opening a PR, auto-merge is enabled with `gh pr merge <nr> --auto --squash`. This private free-tier
-repository cannot enable GitHub's "Allow auto-merge" setting or branch-protection required checks, so
-that command merges as soon as all CI gates on the PR are green — the same behavior used since Phase 1.
+Branches are trunk-based: squash-merge only, linear history, no direct pushes to `main`. PRs are
+merged with `gh pr merge <nr> --auto --squash`. This free private-tier repository has
+`allow_auto_merge: false` and cannot require status checks, so that request **completes as an
+immediate squash merge** rather than waiting for gates. The PR still runs all five gates; confirm
+they are green after merging (or watch the follow-up checks). Green checks never replace reading
+the diff.
 
 [`.github/dependabot.yml`](.github/dependabot.yml) opens grouped weekly PRs for pip, GitHub
 Actions and the Docker digest. [`.github/workflows/dependabot-automerge.yml`](.github/workflows/dependabot-automerge.yml)

@@ -1,0 +1,66 @@
+name: Deploy
+
+# Spec 9.2: Phase 6 is manual-only. Phase 7 adds `push: [main]` with
+# `paths-ignore: ["**.md"]` and a daily ~05:23 UTC schedule for Dependabot merges.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: build, test, push, deploy, smoke
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    env:
+      IMAGE: ghcr.io/${{ github.repository }}:${{ github.sha }}
+      SERVICE_NAME: flop7
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.14"
+
+      - name: Build image for Render (linux/amd64)
+        run: docker build --platform linux/amd64 -t "$IMAGE" .
+
+      - name: Test the exact image (HTTP smoke + Trivy)
+        run: SKIP_BUILD=1 sh scripts/test-image.sh "$IMAGE"
+
+      - name: Push the tested tag to GHCR
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          docker push "$IMAGE"
+
+      - name: Create or patch Render service, deploy the exact tag, poll to live
+        id: render
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_REGISTRY_CREDENTIAL_ID: ${{ vars.RENDER_REGISTRY_CREDENTIAL_ID }}
+          RENDER_OWNER_ID: ${{ vars.RENDER_OWNER_ID }}
+        run: python scripts/render_deploy.py
+
+      - name: Smoke the public URL
+        env:
+          SERVICE_URL: ${{ steps.render.outputs.service_url }}
+        run: sh scripts/smoke.sh "$SERVICE_URL"
+
+      - name: Keep only the newest 3 GHCR image versions
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python scripts/prune_ghcr.py

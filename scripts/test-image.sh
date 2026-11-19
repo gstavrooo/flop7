@@ -15,7 +15,11 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-docker build -t "$IMAGE" "$ROOT"
+# The deploy workflow builds the exact SHA tag first and sets SKIP_BUILD=1 here
+# so the image that is smoke-tested is the one that gets pushed (spec 9.2).
+if [ "${SKIP_BUILD:-0}" != "1" ]; then
+  docker build -t "$IMAGE" "$ROOT"
+fi
 
 # Choose a free host port instead of relying on a fixed one in CI.
 PORT=$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1]); s.close()')

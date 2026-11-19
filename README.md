@@ -40,8 +40,8 @@ Run the checks that exist today:
 After editing a `*.in` file, recompile both lockfiles (runtime first — the dev file includes it):
 
 ```sh
-.venv/bin/python -m piptools compile --generate-hashes -o requirements.txt requirements.in
-.venv/bin/python -m piptools compile --generate-hashes -o requirements-dev.txt requirements-dev.in
+.venv/bin/python -m piptools compile --generate-hashes --no-strip-extras -o requirements.txt requirements.in
+.venv/bin/python -m piptools compile --generate-hashes --allow-unsafe --no-strip-extras -o requirements-dev.txt requirements-dev.in
 ```
 
 ## Running

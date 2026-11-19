@@ -739,8 +739,8 @@
       mySeat = url.fragment.seat;
       hotseat = false;
       inviteSeats = [];
-      saveGameData();
       gameId = url.id;
+      saveGameData(); // persist the joined seat for reloads (spec 6.7)
       await loadGame();
     } else if (url.id) {
       const saved = loadGameData(url.id);

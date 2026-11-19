@@ -12,8 +12,62 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.14"
+
+      - name: Install hashed dev lockfile
+        run: python -m pip install --require-hashes -r requirements-dev.txt
+
+      - name: Pytest (engine, API, migrations, i18n)
+        run: python -m pytest -q
+
+  container-test:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build, smoke and Trivy-scan the image
+        run: sh scripts/test-image.sh flop7:ci
+
+  browser-test:
+    # Spec 8: this job stays pinned to ubuntu-24.04 until Playwright's
+    # `playwright install --with-deps` supports newer Ubuntu images; on newer
+    # images Chromium's system libraries break. Keep both the pin and this note.
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.14"
+
+      - name: Install hashed dev lockfile
+        run: python -m pip install --require-hashes -r requirements-dev.txt
+
+      - name: Install Chromium system dependencies
+        run: python -m playwright install --with-deps chromium
+
+      - name: Playwright browser regressions
+        run: python tests/browser_checks.py
+
   lint:
-    # Spec 8: keep browser-test on ubuntu-24.04 until Playwright --with-deps supports newer images.
     runs-on: ubuntu-24.04
     steps:
       - name: Check out repository
@@ -35,21 +89,34 @@ jobs:
       - name: Ruff format check
         run: ruff format --check .
 
-  test:
+      - name: Shellcheck (pinned tool image)
+        run: >-
+          docker run --rm -v "$PWD:/work" -w /work
+          koalaman/shellcheck-alpine@sha256:c82fe42504fbc9fc68f15d36638e5ee2324ebb8b94e96a3c4e395bf361c49183
+          shellcheck scripts/*.sh
+
+      - name: Actionlint (pinned tool image)
+        run: >-
+          docker run --rm -v "$PWD:/work" -w /work
+          rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667
+          -color .github/workflows/*.yml
+
+      - name: Zizmor offline (pinned tool image)
+        run: >-
+          docker run --rm -v "$PWD:/work" -w /work
+          ghcr.io/woodruffw/zizmor@sha256:3d53be4e0f48952112aa4ca00f45e724b70598082e7202c5c412a6779ca38134
+          --offline .github/workflows/*.yml
+
+  gitleaks:
     runs-on: ubuntu-24.04
     steps:
-      - name: Check out repository
+      - name: Check out full history for the secret scan
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0
           persist-credentials: false
 
-      - name: Set up Python
-        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
-        with:
-          python-version: "3.14"
-
-      - name: Install hashed dev lockfile
-        run: python -m pip install --require-hashes -r requirements-dev.txt
-
-      - name: Pytest
-        run: python -m pytest -q
+      - name: Gitleaks (whole history)
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

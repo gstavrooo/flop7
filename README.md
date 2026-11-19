@@ -4,10 +4,10 @@ A browser-based, multi-player push-your-luck card game with live updates and per
 
 ## Status
 
-Phases 1–4 are complete: repository foundation, the pure rules engine, the FastAPI application
-with SQLite persistence/Alembic/seat-token security, and the vanilla-JS frontend (setup, table,
-live SSE updates, invites, i18n, themes, dialogs, keyboard shortcuts). The container, deployment
-and browser-test pipeline arrive in later phases. The source of truth is
+Phases 1–5 are complete: repository foundation, the pure rules engine, the FastAPI application
+with SQLite persistence/Alembic/seat-token security, the vanilla-JS frontend (setup, table,
+live SSE updates, invites, i18n, themes, dialogs, keyboard shortcuts), and the full test pyramid
+with all CI gates. Deployment to GHCR/Render is wired up in later phases. The source of truth is
 [`FLOP7-SPEC.md`](FLOP7-SPEC.md); the phase prompts (`PHASE-1.md` … `PHASE-8.md`) describe the build order.
 
 ## Stack
@@ -17,9 +17,9 @@ and browser-test pipeline arrive in later phases. The source of truth is
 | Runtime | Python 3.14, FastAPI, uvicorn |
 | Frontend | Vanilla JS/CSS in `app/static/`, no build step, no npm |
 | Storage | SQLite file via SQLAlchemy Core; Alembic migrations applied on boot |
-| Hosting | Render free tier, region Frankfurt; image in GHCR, base image pinned by digest (from Phase 6) |
+| Hosting | Render free tier, region Frankfurt; image in GHCR, base image pinned by digest (deploy arrives in Phase 6) |
 | Dependencies | `requirements.in` / `requirements-dev.in` compiled to hashed lockfiles with pip-tools |
-| Quality gates | ruff (lint + format) and pytest (engine, API, migrations, i18n dictionary parity) today; container, browser and secret-scan gates in later phases |
+| Quality gates | pytest (engine/API/migrations/i18n), Playwright browser regressions, container smoke + Trivy, ruff, shellcheck, actionlint, zizmor, gitleaks |
 
 ## Development
 
@@ -30,12 +30,14 @@ python3 -m venv .venv
 .venv/bin/python -m pip install --require-hashes -r requirements-dev.txt
 ```
 
-Run the checks that exist today:
+Run the checks locally:
 
 ```sh
 .venv/bin/ruff check .
 .venv/bin/ruff format --check .
 .venv/bin/python -m pytest -q
+.venv/bin/python -m playwright install chromium  # once
+.venv/bin/python tests/browser_checks.py        # 20 named browser scenarios, ~20 s
 ```
 
 After editing a `*.in` file, recompile both lockfiles (runtime first — the dev file includes it):
@@ -70,12 +72,15 @@ opens the rules; shortcuts are ignored in inputs and dialogs.
 
 ## CI
 
-[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on every pull request with two gates
-today: `lint` (ruff check and format check) and `test` (pytest from the hashed dev lockfile).
-The remaining gates from spec section 8 — `container-test`, `browser-test`, gitleaks, and
-shellcheck/actionlint/zizmor inside `lint` — arrive in later phases.
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on every pull request with all five
+required gates from spec section 8: `test` (pytest from the hashed dev lockfile), `container-test`
+(`scripts/test-image.sh`: build, HTTP smoke via `scripts/smoke.sh`, Trivy fixable HIGH/CRITICAL
+scan with `.trivyignore`), `browser-test` (Playwright/Chromium on pinned `ubuntu-24.04`, mobile
+and desktop, no screenshots/traces), `lint` (ruff, shellcheck, actionlint, zizmor offline) and
+`gitleaks` (whole history). All actions and tool images are pinned by SHA/digest.
 
-Branches are trunk-based: squash-merge only, linear history, no direct pushes to `main`.
+Branches are trunk-based: squash-merge only, linear history, no direct pushes to `main`. After
+opening a PR, auto-merge is enabled with `gh pr merge <nr> --auto --squash`.
 
 ## Trade-offs
 

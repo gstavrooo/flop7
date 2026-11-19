@@ -103,6 +103,38 @@ def test_service_url_and_wait_for_live() -> None:
     assert calls == [("GET", "/services/srv-1"), ("GET", "/services/srv-1/deploys/dep-1")]
 
 
+def test_trigger_deploy_handles_created_and_queued() -> None:
+    old = {"deploy": {"id": "dep-old", "status": "live"}, "cursor": "c1"}
+    new = {"deploy": {"id": "dep-new", "status": "created"}, "cursor": "c2"}
+    image = "ghcr.io/gstavrooo/flop7:abc"
+
+    def with_body(method: str, path: str, body: dict | None) -> dict:
+        if method == "POST":
+            assert body == {"imageUrl": image}
+            return {"deploy": {"id": "dep-body"}}
+        return [old]
+
+    assert render.trigger_deploy(with_body, "srv-1", image) == "dep-body"
+
+    calls = {"list": 0}
+
+    def queued(method: str, path: str, body: dict | None) -> dict | list:
+        if method == "POST":
+            assert body == {"imageUrl": image}
+            return {}  # Render 202 Queued has no response body
+        calls["list"] += 1
+        return [old] if calls["list"] == 1 else [new]
+
+    assert render.trigger_deploy(queued, "srv-1", image, sleep=lambda _: None) == "dep-new"
+    assert calls["list"] == 2
+
+    def stuck(method: str, path: str, body: dict | None) -> dict | list:
+        return {} if method == "POST" else [old]
+
+    with pytest.raises(render.RenderError, match="no new deploy"):
+        render.trigger_deploy(stuck, "srv-1", image, max_polls=2, interval=1, sleep=lambda _: None)
+
+
 def test_wait_for_live_failure_and_timeout() -> None:
     def failing(method: str, path: str, body: dict | None) -> dict:
         if path.endswith("/deploys/dep-1"):

@@ -8,6 +8,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     DATABASE_URL=sqlite:////data/flop7.db \
     MIGRATE_ON_START=1
 
+# Apply Debian security fixes to the pinned base (Trivy fails on fixable
+# HIGH/CRITICAL findings in the container-test gate).
+RUN apt-get update \
+ && apt-get -y --no-install-recommends upgrade \
+ && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 COPY requirements.txt ./

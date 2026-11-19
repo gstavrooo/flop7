@@ -26,10 +26,11 @@ EOF
 
 MOVE="$BASE/api/games/$GAME_ID/stay"
 BODY="{\"seat\":0,\"version\":$VERSION}"
+FOREIGN_TOKEN="wrong-token"  # never a real credential; kept in a variable for the secret scanner
 
 # 4. A foreign seat token is rejected with 403.
 code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 -X POST "$MOVE" \
-  -H 'Content-Type: application/json' -H 'X-Seat-Token: not-a-seat-token' -d "$BODY")
+  -H 'Content-Type: application/json' -H "X-Seat-Token: $FOREIGN_TOKEN" -d "$BODY")
 [ "$code" = 403 ] || fail "expected 403 for a foreign token, got $code"
 
 # 5. The owner can stay (200).

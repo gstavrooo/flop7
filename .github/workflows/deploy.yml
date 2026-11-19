@@ -1,9 +1,14 @@
 name: Deploy
 
-# Spec 9.2: Phase 6 is manual-only. Phase 7 adds `push: [main]` with
-# `paths-ignore: ["**.md"]` and a daily ~05:23 UTC schedule for Dependabot merges.
+# Spec 9.2: go-live triggers. `push` deploys every merge to main; the daily
+# 05:23 UTC schedule catches Dependabot bot merges, which fire no push event.
 on:
+  push:
+    branches: [main]
+    paths-ignore: ["**.md"]
   workflow_dispatch:
+  schedule:
+    - cron: "23 5 * * *"
 
 permissions:
   contents: read

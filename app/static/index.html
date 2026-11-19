@@ -3,10 +3,110 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light dark">
     <title>Flop7</title>
+    <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="/static/theme.js"></script>
   </head>
   <body>
-    <h1>Flop7</h1>
-    <p>The JSON API is ready. The frontend arrives in Phase 4.</p>
+    <header class="topbar">
+      <div class="brand">
+        <span class="wordmark">FLOP7</span>
+        <span class="tagline" data-i18n="tagline"></span>
+      </div>
+      <nav class="top-actions" data-i18n-aria="nav.toolbar" aria-label="Toolbar">
+        <button id="btn-rules" class="icon-btn" type="button" data-i18n-aria="nav.rules" aria-label="Rules" data-i18n-title="nav.rules" title="Rules">❓</button>
+        <button id="btn-language" class="icon-btn" type="button" data-i18n-aria="nav.language" aria-label="Language" data-i18n-title="nav.language" title="Language">🌐</button>
+        <button id="btn-sound" class="icon-btn" type="button" data-i18n-aria="nav.soundOn" aria-label="Sound on" aria-pressed="true" data-i18n-title="nav.soundOn" title="Sound on">🔊</button>
+        <button id="btn-theme" class="icon-btn" type="button" data-i18n-aria="nav.themeAuto" aria-label="Theme: automatic" data-i18n-title="nav.themeAuto" title="Theme: automatic">◐</button>
+      </nav>
+    </header>
+
+    <p id="storage-hint" class="storage-hint" role="status" hidden data-i18n="storage.unavailable"></p>
+
+    <main class="main">
+      <section id="setup-screen" class="screen setup-screen" aria-labelledby="setup-title">
+        <h1 id="setup-title" class="screen-title" data-i18n="setup.title"></h1>
+        <p class="hint" data-i18n="setup.hint"></p>
+
+        <form id="setup-form" novalidate>
+          <div class="player-box">
+            <label class="field-label" for="names" data-i18n="setup.namesLabel"></label>
+            <div class="box-inner">
+              <input id="names" name="names" type="text" autocomplete="off" spellcheck="false"
+                     data-i18n-placeholder="setup.namesPlaceholder" placeholder="Ann, Bob, Chris">
+              <span id="bot-chip" class="bot-chip" hidden data-i18n="setup.botChip">🤖 Bot</span>
+            </div>
+          </div>
+
+          <p id="participant-preview" class="participant-preview" aria-live="polite"></p>
+
+          <div class="checks">
+            <label class="check"><input id="hotseat" type="checkbox" checked> <span data-i18n="setup.hotseat"></span></label>
+            <label class="check"><input id="add-bot" type="checkbox"> <span data-i18n="setup.addBot"></span></label>
+          </div>
+
+          <p id="setup-error" class="error" role="alert" hidden></p>
+          <button id="btn-start" class="btn btn-primary" type="submit" data-i18n="setup.start"></button>
+        </form>
+      </section>
+
+      <section id="table-screen" class="screen table-screen" hidden data-i18n-aria="table.aria" aria-label="Game table">
+        <div id="winner-banner" class="winner-banner" role="status" hidden>
+          <span id="winner-title" class="winner-title"></span>
+          <span id="winner-margin" class="winner-margin"></span>
+        </div>
+
+        <div id="round-summary" class="round-summary" hidden>
+          <h2 id="round-summary-title" class="summary-title"></h2>
+          <ul id="round-results" class="round-results"></ul>
+        </div>
+
+        <div id="players" class="players"></div>
+      </section>
+    </main>
+
+    <section id="dock" class="dock" data-i18n-aria="dock.aria" aria-label="Controls">
+      <div class="dock-top">
+        <span id="dock-round" class="dock-round" data-i18n="dock.setup"></span>
+        <span id="dock-deck" class="dock-deck" aria-live="polite"></span>
+      </div>
+      <p id="dock-prompt" class="dock-prompt" aria-live="polite" data-i18n="dock.setup"></p>
+      <div id="dock-actions" class="dock-actions"></div>
+      <div class="waiting-bar" aria-hidden="true"><span id="waiting-fill" class="waiting-fill"></span></div>
+    </section>
+
+    <div id="toast" class="toast" role="alert" hidden></div>
+    <div id="connection-chip" class="connection-chip" role="status" hidden data-i18n="connection.lost"></div>
+
+    <dialog id="invite-dialog" class="dialog">
+      <h2 class="dialog-title" data-i18n="invite.title"></h2>
+      <p class="dialog-hint" data-i18n="invite.intro"></p>
+      <div id="invite-list" class="invite-list"></div>
+      <div class="dialog-actions">
+        <button id="invite-close" class="btn" type="button" data-i18n="invite.close"></button>
+      </div>
+    </dialog>
+
+    <dialog id="rules-dialog" class="dialog">
+      <h2 class="dialog-title" data-i18n="rules.title"></h2>
+      <p class="dialog-body" data-i18n="rules.body"></p>
+      <div class="dialog-actions">
+        <button class="btn dialog-close" type="button" data-i18n="invite.close"></button>
+      </div>
+    </dialog>
+
+    <dialog id="card-dialog" class="dialog">
+      <h2 class="dialog-title" data-i18n="card.title"></h2>
+      <p id="card-explanation" class="dialog-body"></p>
+      <div class="dialog-actions">
+        <button class="btn dialog-close" type="button" data-i18n="invite.close"></button>
+      </div>
+    </dialog>
+
+    <script src="/static/i18n.js"></script>
+    <script src="/static/qrcode.js"></script>
+    <script src="/static/app.js"></script>
   </body>
 </html>

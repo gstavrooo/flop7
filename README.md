@@ -4,22 +4,22 @@ A browser-based, multi-player push-your-luck card game with live updates and per
 
 ## Status
 
-Phases 1–3 are complete: repository foundation, the pure rules engine, and the FastAPI application
-with SQLite persistence, Alembic migrations and the seat-token security model. The frontend is a
-placeholder (`app/static/index.html`); the real UI and the deployment pipeline arrive in later
-phases. The source of truth is [`FLOP7-SPEC.md`](FLOP7-SPEC.md); the phase prompts
-(`PHASE-1.md` … `PHASE-8.md`) describe the build order.
+Phases 1–4 are complete: repository foundation, the pure rules engine, the FastAPI application
+with SQLite persistence/Alembic/seat-token security, and the vanilla-JS frontend (setup, table,
+live SSE updates, invites, i18n, themes, dialogs, keyboard shortcuts). The container, deployment
+and browser-test pipeline arrive in later phases. The source of truth is
+[`FLOP7-SPEC.md`](FLOP7-SPEC.md); the phase prompts (`PHASE-1.md` … `PHASE-8.md`) describe the build order.
 
 ## Stack
 
 | Concern | Choice |
 | --- | --- |
 | Runtime | Python 3.14, FastAPI, uvicorn |
-| Frontend | Vanilla JS/CSS in `app/static/`, no build step, no npm (from Phase 4) |
+| Frontend | Vanilla JS/CSS in `app/static/`, no build step, no npm |
 | Storage | SQLite file via SQLAlchemy Core; Alembic migrations applied on boot |
 | Hosting | Render free tier, region Frankfurt; image in GHCR, base image pinned by digest (from Phase 6) |
 | Dependencies | `requirements.in` / `requirements-dev.in` compiled to hashed lockfiles with pip-tools |
-| Quality gates | ruff (lint + format) and pytest (engine, API, migrations) today; container, browser and secret-scan gates in later phases |
+| Quality gates | ruff (lint + format) and pytest (engine, API, migrations, i18n dictionary parity) today; container, browser and secret-scan gates in later phases |
 
 ## Development
 
@@ -59,6 +59,14 @@ Endpoints: `POST /api/games`, `POST /api/games/{id}/{hit,stay,next,target}`,
 `GET /api/games/{id}`, `GET /api/games/{id}/events?seconds=N` (SSE), `GET /api/health`, plus the
 static root. Seat tokens are returned only in the create response and must be sent back in the
 `X-Seat-Token` header; a stale `version` yields 409.
+
+The frontend at `/` is a single page: create a game (optionally hot-seat and/or with a bot),
+then hand out the per-seat invite links from the Invite dialog. Invite tokens travel only in the
+URL fragment, which the app strips from the address bar after reading; tokens for "your" seats
+persist in namespaced local storage and degrade to session-only if storage is blocked or corrupt.
+Language (de/en), theme (auto/light/dark) and sound are global preferences, persisted and applied
+before first paint. Keyboard shortcuts: `H`/`Space` hit, `S` stay, `1..6` choose a target, `?`
+opens the rules; shortcuts are ignored in inputs and dialogs.
 
 ## CI
 

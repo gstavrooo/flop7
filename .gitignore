@@ -1,0 +1,24 @@
+# Rebuild-package docs: private to this machine, never published
+/00-READ-ME-FIRST.md
+/FLOP7-SPEC.md
+/PHASE-*.md
+
+# Virtual environments
+.venv/
+venv/
+
+# Python caches and build artifacts
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Browser tooling
+.playwright/
+
+# Local databases and coverage
+*.db
+*.db-shm
+*.db-wal
+.coverage

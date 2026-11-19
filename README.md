@@ -14,7 +14,7 @@ all CI gates, and the manual GHCR/Render deploy pipeline. The source of truth is
 
 | Concern | Choice |
 | --- | --- |
-| Runtime | Python 3.14, FastAPI, uvicorn |
+| Runtime | FastAPI, uvicorn; Python 3.15 slim in the container (digest-pinned), CI/lockfiles on 3.14 |
 | Frontend | Vanilla JS/CSS in `app/static/`, no build step, no npm |
 | Storage | SQLite file via SQLAlchemy Core; Alembic migrations applied on boot |
 | Hosting | Render free tier, region Frankfurt; image in GHCR, base image pinned by digest |
@@ -87,6 +87,8 @@ Actions and the Docker digest. [`.github/workflows/dependabot-automerge.yml`](.g
 opts those PRs into auto-merge for **patch/minor** updates only (squash); majors stay manual.
 
 ## Deployment (manual in Phase 6)
+
+The current live service is <https://flop7-01ed.onrender.com> (free plan, Frankfurt; ephemeral DB).
 
 [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) is **manual-only** for now — Phase 7
 adds the push/schedule triggers. Run it on `main` with:

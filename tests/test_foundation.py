@@ -2,10 +2,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
+# The rebuild-package docs (FLOP7-SPEC.md, 00-READ-ME-FIRST.md, PHASE-*.md) are
+# deliberately gitignored as private to the rebuild machine, so CI cannot assert
+# their presence. Only published, tracked files belong here.
 FOUNDATION_FILES = (
     "README.md",
     "AGENTS.md",
-    "FLOP7-SPEC.md",
     "pyproject.toml",
     "requirements.txt",
     "requirements-dev.txt",

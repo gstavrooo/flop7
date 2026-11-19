@@ -1,0 +1,5 @@
+# Trivy ignore file for the container-test gate (spec section 8).
+# Only non-fixable findings or acknowledged, reviewed exceptions belong here;
+# the gate fails on every fixable HIGH/CRITICAL finding not listed below.
+# Add an entry with a short justification and a review date, e.g.:
+# CVE-2024-0000  # base image, fixed upstream in the next python slim release; reviewed 2026-11-19

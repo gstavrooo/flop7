@@ -80,18 +80,23 @@ and desktop, no screenshots/traces), `lint` (ruff, shellcheck, actionlint, zizmo
 `gitleaks` (whole history). All actions and tool images are pinned by SHA/digest.
 
 Branches are trunk-based: squash-merge only, linear history, no direct pushes to `main`. After
-opening a PR, auto-merge is enabled with `gh pr merge <nr> --auto --squash`.
+opening a PR, auto-merge is enabled with `gh pr merge <nr> --auto --squash`. This private free-tier
+repository cannot enable GitHub's "Allow auto-merge" setting or branch-protection required checks, so
+that command merges as soon as all CI gates on the PR are green — the same behavior used since Phase 1.
 
 [`.github/dependabot.yml`](.github/dependabot.yml) opens grouped weekly PRs for pip, GitHub
 Actions and the Docker digest. [`.github/workflows/dependabot-automerge.yml`](.github/workflows/dependabot-automerge.yml)
 opts those PRs into auto-merge for **patch/minor** updates only (squash); majors stay manual.
 
-## Deployment (manual in Phase 6)
+## Deployment (live on merge)
 
 The current live service is <https://flop7-01ed.onrender.com> (free plan, Frankfurt; ephemeral DB).
 
-[`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) is **manual-only** for now — Phase 7
-adds the push/schedule triggers. Run it on `main` with:
+[`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) is live: it runs on every push to
+`main` (Markdown-only changes are skipped via `paths-ignore: ["**.md"]`), on manual dispatch, and on a
+daily schedule at 05:23 UTC. The schedule is the Dependabot catch-up: bot merges use `GITHUB_TOKEN`,
+which does not fire a `push` event, so they deploy with the next scheduled run — within 24 h. Dispatch
+manually to deploy sooner:
 
 ```sh
 gh workflow run deploy.yml --ref main
@@ -127,5 +132,8 @@ pulls the image on every deploy/restart, so older versions are never needed at r
   the instance. The frontend must reconnect gracefully (SSE reconnect covers this).
 - **No auto-rollback:** a failed deploy leaves a red CI/CD run and a fix-forward commit; it never
   silently reverts to an older image.
+- **Dependabot catch-up delay:** a bot merge deploys on the next 05:23 UTC scheduled run, so a
+  dependency bump can take up to ~24 h to reach production; dispatch the workflow manually to deploy
+  it immediately.
 - **SQLite + polling SSE:** version-checked writes and polling avoid queues and extra services at
   the cost of a request per viewer per second.

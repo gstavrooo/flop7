@@ -1,4 +1,4 @@
-"""Offline checks for the Phase 6 deploy helpers (spec sections 9.2 and 9.3)."""
+"""Offline checks for the deploy helpers and go-live triggers (spec 9.2 and 9.3)."""
 
 from __future__ import annotations
 
@@ -164,3 +164,12 @@ def test_prune_keeps_newest_and_protects_current_tag() -> None:
     assert prune.select_versions(versions, 2) == ["v3", "v4"]
     assert prune.select_versions(versions, 2, frozenset({"current"})) == ["v3"]
     assert prune.select_versions(versions, 3) == ["v4"]
+
+
+def test_deploy_workflow_go_live_triggers() -> None:
+    """Phase 7: push-on-merge, manual dispatch and the daily Dependabot catch-up must stay set."""
+    workflow = (SCRIPTS.parent / ".github/workflows/deploy.yml").read_text(encoding="utf-8")
+    assert "branches: [main]" in workflow
+    assert 'paths-ignore: ["**.md"]' in workflow
+    assert "workflow_dispatch:" in workflow
+    assert '- cron: "23 5 * * *"' in workflow

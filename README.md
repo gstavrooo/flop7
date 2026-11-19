@@ -4,10 +4,11 @@ A browser-based, multi-player push-your-luck card game with live updates and per
 
 ## Status
 
-Phase 1 — repository foundation and toolchain — is complete. The game engine, API, frontend and
-deployment pipeline arrive in later phases; there is no runnable application yet. The source of
-truth is [`FLOP7-SPEC.md`](FLOP7-SPEC.md); the phase prompts (`PHASE-1.md` … `PHASE-8.md`) describe
-the build order.
+Phases 1–3 are complete: repository foundation, the pure rules engine, and the FastAPI application
+with SQLite persistence, Alembic migrations and the seat-token security model. The frontend is a
+placeholder (`app/static/index.html`); the real UI and the deployment pipeline arrive in later
+phases. The source of truth is [`FLOP7-SPEC.md`](FLOP7-SPEC.md); the phase prompts
+(`PHASE-1.md` … `PHASE-8.md`) describe the build order.
 
 ## Stack
 
@@ -15,10 +16,10 @@ the build order.
 | --- | --- |
 | Runtime | Python 3.14, FastAPI, uvicorn |
 | Frontend | Vanilla JS/CSS in `app/static/`, no build step, no npm (from Phase 4) |
-| Storage | SQLite file via SQLAlchemy Core; Alembic migrations applied on boot (from Phase 3) |
+| Storage | SQLite file via SQLAlchemy Core; Alembic migrations applied on boot |
 | Hosting | Render free tier, region Frankfurt; image in GHCR, base image pinned by digest (from Phase 6) |
 | Dependencies | `requirements.in` / `requirements-dev.in` compiled to hashed lockfiles with pip-tools |
-| Quality gates | ruff (lint + format) and pytest today; container, browser and secret-scan gates in later phases |
+| Quality gates | ruff (lint + format) and pytest (engine, API, migrations) today; container, browser and secret-scan gates in later phases |
 
 ## Development
 
@@ -46,10 +47,18 @@ After editing a `*.in` file, recompile both lockfiles (runtime first — the dev
 
 ## Running
 
-Not applicable yet: Phase 1 ships tooling and documentation only. Once the application lands,
-uvicorn will serve both the JSON API and the static frontend on `PORT` (default `8080`), with
-Alembic migrations applied at boot when `MIGRATE_ON_START=1`. The exact command is documented here
-in the phase that adds the app.
+uvicorn serves the JSON API and the static files from one app. `DATABASE_URL` defaults to
+`sqlite:///flop7.db`; `PORT` defaults to `8080`. Set `MIGRATE_ON_START=1` to apply Alembic
+migrations before serving (the app refuses to start against a legacy, unmigrated schema):
+
+```sh
+MIGRATE_ON_START=1 .venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port "${PORT:-8080}"
+```
+
+Endpoints: `POST /api/games`, `POST /api/games/{id}/{hit,stay,next,target}`,
+`GET /api/games/{id}`, `GET /api/games/{id}/events?seconds=N` (SSE), `GET /api/health`, plus the
+static root. Seat tokens are returned only in the create response and must be sent back in the
+`X-Seat-Token` header; a stale `version` yields 409.
 
 ## CI
 

@@ -7,3 +7,5 @@ extend-select = ["I", "UP", "B"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Starlette 1.10 suggests httpx2, but the pinned, ubiquitous httpx TestClient works.
+filterwarnings = ["ignore:Using `httpx` with `starlette.testclient` is deprecated:UserWarning"]

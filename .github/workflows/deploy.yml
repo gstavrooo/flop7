@@ -37,6 +37,10 @@ jobs:
       - name: Build image for Render (linux/amd64)
         run: docker build --platform linux/amd64 -t "$IMAGE" .
 
+      - name: Report image size
+        run: >-
+          docker image inspect "$IMAGE" --format 'image size {{.Size}} bytes'
+
       - name: Test the exact image (HTTP smoke + Trivy)
         run: SKIP_BUILD=1 sh scripts/test-image.sh "$IMAGE"
 

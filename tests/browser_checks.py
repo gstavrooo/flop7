@@ -868,6 +868,57 @@ def test_dock_text_and_buttons_are_centered(r: Runner) -> None:
         assert abs(centers["dock"] - centers["group"]) <= 3, centers
 
 
+def test_boxes_do_not_resize_when_status_changes(r: Runner) -> None:
+    view = r.create(("Ann", "Bob"))
+    state = r.clean(view["id"])
+    state["players"][0]["numbers"] = [5]
+    r.store(view["id"], state)
+    with r.page() as page:
+        r.join(page, view, 0)
+        page.wait_for_selector("#players .player-card")
+        before = [box.bounding_box()["height"] for box in page.locator(".player-card").all()]
+        hint_before = page.locator("#deal-hint").bounding_box()["height"]
+
+        state = r.load(view["id"])
+        state["players"][0].update(numbers=[5, 6, 7], second=True, status="stayed")
+        r.store(view["id"], state)
+        page.wait_for_selector(".player-card .status-badge.status-stayed")
+        after = [box.bounding_box()["height"] for box in page.locator(".player-card").all()]
+        hint_after = page.locator("#deal-hint").bounding_box()["height"]
+
+        assert before and before == after, f"player cards resized: {before} -> {after}"
+        assert hint_before == hint_after, f"deal hint box resized: {hint_before} -> {hint_after}"
+        assert page.locator("#deal-hint").is_hidden()
+
+
+def test_mobile_layout_fits_portrait_and_landscape(r: Runner) -> None:
+    view = r.create(("Ann", "Bob"))
+    state = r.clean(view["id"])
+    state["players"][0]["numbers"] = [5]
+    r.store(view["id"], state)
+
+    for viewport in (MOBILE, {"width": 844, "height": 390}):
+        with r.page(viewport) as page:
+            r.join(page, view, 0)
+            page.wait_for_selector("#players .player-card")
+            assert page.evaluate("() => document.documentElement.scrollWidth <= window.innerWidth + 1"), (
+                f"horizontal overflow at {viewport}"
+            )
+            dock = page.locator("#dock").bounding_box()
+            assert dock and dock["y"] >= 0, f"dock off screen at {viewport}"
+            assert abs(dock["y"] + dock["height"] - viewport["height"]) <= 1
+            padding = page.evaluate("() => parseFloat(getComputedStyle(document.body).paddingBottom)")
+            assert padding >= dock["height"] + 15, "body padding no longer clears the dock"
+            if viewport["height"] <= 560:
+                assert dock["height"] <= 160, f"short viewport dock too tall: {dock['height']}"
+
+            page.keyboard.press("?")
+            page.wait_for_selector("#rules-dialog[open]")
+            dialog = page.locator("#rules-dialog").bounding_box()
+            assert dialog and 0 <= dialog["x"] and dialog["x"] + dialog["width"] <= viewport["width"] + 1
+            assert dialog["height"] <= viewport["height"] * 0.93, f"rules dialog too tall: {dialog}"
+
+
 def test_copy_feedback_stays_inside_invite_dialog(r: Runner) -> None:
     with r.page() as page:
         page.goto(r.base_url + "/")

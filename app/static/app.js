@@ -328,7 +328,7 @@
       renderDealHint();
     } else {
       els.players.textContent = "";
-      els.dealHint.hidden = true;
+      els.dealHint.classList.add("is-placeholder");
       els.summary.hidden = true;
       els.winnerBanner.hidden = true;
       lastSeatCards = null;
@@ -445,10 +445,12 @@
       }
       card.appendChild(progress);
 
-      if (player.second) card.appendChild(el("span", "second-flag", t("table.second")));
-
+      // Reserve the badge row so gaining a status never changes the card height.
+      const statusSlot = el("div", "player-status");
+      if (player.second) statusSlot.appendChild(el("span", "second-flag", t("table.second")));
       const status = statusFor(player, seat);
-      if (status) card.appendChild(el("span", "status-badge " + status.cls, t(status.key)));
+      if (status) statusSlot.appendChild(el("span", "status-badge " + status.cls, t(status.key)));
+      card.appendChild(statusSlot);
 
       const newest = newestCardFor(seat);
       const cards = el("div", "cards");
@@ -479,7 +481,7 @@
       game.players.every(function (player) {
         return player.numbers.length + player.mods.length <= 1;
       });
-    els.dealHint.hidden = !opening;
+    els.dealHint.classList.toggle("is-placeholder", !opening);
   }
 
   function renderSummary() {

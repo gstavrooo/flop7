@@ -891,6 +891,35 @@ def test_boxes_do_not_resize_when_status_changes(r: Runner) -> None:
         assert page.locator("#deal-hint").is_hidden()
 
 
+def test_all_cards_stay_visible(r: Runner) -> None:
+    view = r.create(("Ann", "Bob"))
+    state = r.clean(view["id"])
+    state["players"][0]["numbers"] = [1, 2, 3, 4, 5, 6, 7]
+    state["players"][0]["mods"] = ["+5", "x2"]
+    r.store(view["id"], state)
+    for viewport in (DESKTOP, MOBILE):
+        with r.page(viewport) as page:
+            r.join(page, view, 0)
+            page.wait_for_function(
+                "() => document.querySelectorAll('.player-card:first-child .card').length === 9"
+            )
+            info = page.evaluate(
+                """() => {
+                     const area = document.querySelector('.player-card .cards').getBoundingClientRect();
+                     const cards = [...document.querySelectorAll('.player-card:first-child .card')]
+                       .map(c => c.getBoundingClientRect());
+                     const box = document.querySelector('.player-card:first-child').getBoundingClientRect();
+                     return {
+                       clipped: cards.some(c => c.bottom > area.bottom + 1 || c.right > area.right + 1),
+                       outside: cards.some(c => c.bottom > box.bottom + 1),
+                       scrolls: document.querySelector('.player-card:first-child .cards').scrollHeight >
+                                document.querySelector('.player-card:first-child .cards').clientHeight + 1
+                     };
+                   }"""
+            )
+            assert not info["clipped"] and not info["outside"] and not info["scrolls"], (viewport, info)
+
+
 def test_mobile_layout_fits_portrait_and_landscape(r: Runner) -> None:
     view = r.create(("Ann", "Bob"))
     state = r.clean(view["id"])

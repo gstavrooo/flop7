@@ -240,8 +240,8 @@ button { font-family: inherit; }
   background: var(--surface);
   border: var(--border-width) solid var(--border);
   box-shadow: var(--shadow-offset) var(--shadow-offset) 0 var(--shadow);
-  /* Fixed height: drawing cards or gaining a badge must not resize the grid. */
-  height: 230px;
+  /* Generous minimum keeps normal rounds stable; extra cards can still grow it. */
+  min-height: 260px;
 }
 .player-card.is-turn { background: var(--yellow); color: #111; }
 .player-card.is-mine { outline: 3px dashed var(--ink); outline-offset: 3px; }
@@ -262,7 +262,7 @@ button { font-family: inherit; }
 .player-line strong { font-weight: bold; }
 
 /* A reserved row keeps badges from growing the card when they appear. */
-.player-status { min-height: 28px; margin-top: 4px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.player-status { min-height: 32px; margin-top: 4px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .status-badge {
   display: inline-block;
   padding: 3px 8px;
@@ -288,8 +288,7 @@ button { font-family: inherit; }
   gap: 6px;
   margin-top: 8px;
   flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
+  min-height: 80px; /* reserved space for the opening deal */
 }
 .card {
   min-width: 34px;
@@ -502,7 +501,7 @@ button { font-family: inherit; }
   .dock-prompt { font-size: 14px; min-height: 2.2em; }
   .dock .btn { flex: 1 1 auto; }
   .waiting-bar { margin-left: -12px; margin-right: -12px; }
-  .player-card { height: 200px; padding: 10px; }
+  .player-card { min-height: 230px; padding: 10px; }
   .player-name { font-size: 15px; }
   .dialog { padding: 14px; }
   #invite-dialog { width: calc(100vw - 20px); }

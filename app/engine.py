@@ -187,6 +187,24 @@ def _advance_turn(state: State, from_seat: int) -> None:
     _finish_round(state)
 
 
+def _end_card_turn(state: State, seat: int) -> None:
+    """Pass the turn after one card so players alternate card by card.
+
+    Busts, a Second Chance save and a self-freeze already move the turn inside
+    the card logic; the ``seat == state["turn"]`` guard stops a second pass.
+    A pending decision (or a paused opening deal) keeps the turn put until it
+    is resolved — ``target`` then ends the card turn through this same helper.
+    """
+    if state["round_over"] or state["winner"] is not None:
+        return
+    if state["pending"] or "deal_index" in state:
+        return
+    if seat != state["turn"]:
+        return
+    if state["players"][seat]["status"] == "active":
+        _advance_turn(state, seat)
+
+
 def _apply_number(state: State, seat: int, card: Card) -> bool:
     """Apply a number card; return True when a Second Chance ended the turn.
 
@@ -334,6 +352,7 @@ def hit(state: State, seat: int, rng: Any) -> State:
     ):
         _advance_turn(new, seat)
     new = resolve_pending(new, rng)
+    _end_card_turn(new, seat)
     _ensure_round_state(new)
     return new
 
@@ -364,11 +383,15 @@ def target(state: State, seat: int, target_seat: int, rng: Any) -> State:
         raise IllegalMove(NOT_YOUR_DECISION)
     if target_seat not in _valid_targets(new, pending):
         raise IllegalMove(INVALID_TARGET)
+    turn_before = new["turn"]
+    from_deal = "deal_index" in new
     new["pending"].pop(0)
     _apply_pending(new, {**pending, "target": target_seat}, rng)
     new = resolve_pending(new, rng)
     if "deal_index" in new and not new["pending"]:
         new = start_round(new, rng, resume=True)  # resume the paused opening deal
+    if not from_deal:
+        _end_card_turn(new, turn_before)
     return new
 
 

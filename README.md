@@ -18,10 +18,12 @@ never grants control. No accounts, profiles, payments or chat.
   (`+2` … `+10`, `x2`) and nine Action cards (Freeze, Flip Three, Second Chance ×3). The deck is
   shuffled once; the discard pile is reshuffled when it empties. Empty deck + discard = illegal move.
 - **Turn:** every round starts with one face-up card dealt to each player (action cards in the deal
-  resolve immediately). Then hit as long as you like, then stay. Drawing a number you already hold
-  busts you (0 for the round) unless a one-shot Second Chance absorbs it — and using it **ends your
-  turn** while keeping you in the round. `x2` doubles the sum of numbers, then `+N` modifiers are
-  added. Seven different numbers in hand = **Flip 7** (+15, ends the round for all).
+  resolve immediately). Then you **hit once (draw one card) or stay**, and the turn passes to the
+  next active player — so players, including the bot, alternate card by card. Staying banks your
+  score and sits you out for the rest of the round. Drawing a number you already hold busts you (0
+  for the round) unless a one-shot Second Chance absorbs it — and using it **ends that card's turn**
+  while keeping you in the round. `x2` doubles the sum of numbers, then `+N` modifiers are added.
+  Seven different numbers in hand = **Flip 7** (+15, ends the round for all).
 - **Actions:** any active player may be targeted, **including yourself**. Freeze banks the target;
   Flip Three lets a target draw up to three cards (action cards are queued for them afterwards);
   Second Chance protects once and is passed on if already held.
@@ -31,9 +33,10 @@ never grants control. No accounts, profiles, payments or chat.
 
 These follow the publisher's rules (opening deal, self-targeting, Second Chance ending the turn).
 The deliberate adaptations are **2–6 seats instead of 3–18** and the optional bot for solo play.
-- **Bot:** optional, appended last, never sees the deck. It stays at ≥ 18 points or ≥ 4 numbers,
-  targets the strongest opponent, and pauses a persisted 1.5 s between decisions so refreshes and
-  multiple viewers cannot duplicate or skip a move. Solo human + bot works.
+- **Bot:** optional, appended last, never sees the deck. On each of its turns it stays at ≥ 18
+  points or ≥ 4 numbers (otherwise hits one card), targets the strongest opponent, and pauses a
+  persisted 1.5 s between decisions so refreshes and multiple viewers cannot duplicate or skip a
+  move. Solo human + bot alternates one card at a time.
 
 ## Stack
 

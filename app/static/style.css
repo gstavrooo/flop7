@@ -355,10 +355,10 @@ button { font-family: inherit; }
   display: flex;
   flex-direction: column;
 }
-.dock-top { display: flex; justify-content: space-between; gap: 12px; font-weight: bold; }
+.dock-top { display: flex; justify-content: center; gap: 24px; font-weight: bold; text-align: center; }
 .dock-deck { white-space: nowrap; }
-.dock-prompt { margin: 8px 0; font-size: 16px; font-weight: bold; min-height: 2.4em; }
-.dock-actions { display: flex; flex-wrap: wrap; gap: 10px; align-content: flex-start; flex: 1; overflow-y: auto; }
+.dock-prompt { margin: 8px 0; font-size: 16px; font-weight: bold; min-height: 2.4em; text-align: center; }
+.dock-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; align-content: flex-start; flex: 1; overflow-y: auto; text-align: center; }
 .waiting-bar { height: 8px; flex: none; margin: 8px -16px 0; background: var(--paper); border-top: 2px solid var(--border); }
 .waiting-fill { display: block; height: 100%; width: 0; background: var(--green); transition: width 0.2s linear; }
 .waiting-fill.w-none { width: 0; }
@@ -425,6 +425,7 @@ button { font-family: inherit; }
 .dialog {
   width: min(92vw, 560px);
   max-height: 84vh;
+  overflow-y: auto;
   padding: 20px;
   color: var(--ink);
   background: var(--surface);
@@ -437,6 +438,15 @@ button { font-family: inherit; }
 .invite-feedback { margin: 0 0 10px; font-weight: bold; }
 .invite-feedback:empty { display: none; }
 .dialog-body { white-space: pre-line; margin: 0 0 16px; }
+.rules-list { display: grid; gap: 12px; margin: 0 0 16px; padding-left: 22px; }
+.rules-list li { line-height: 1.35; }
+.rules-list strong {
+  display: block;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.rules-list span { display: block; color: var(--muted); font-size: 13px; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 12px; }
 
 /* Wider so long invite URLs fit; each row wraps its link onto a few lines. */

@@ -106,7 +106,7 @@ Run every check locally:
 .venv/bin/ruff format --check .
 .venv/bin/python -m pytest -q                        # 86 tests
 .venv/bin/python -m playwright install chromium      # once
-.venv/bin/python tests/browser_checks.py             # 29 named scenarios, ~25 s
+.venv/bin/python tests/browser_checks.py             # 30 named scenarios, ~25 s
 ```
 
 After editing a `*.in` file, recompile both lockfiles (runtime first — the dev file includes it):

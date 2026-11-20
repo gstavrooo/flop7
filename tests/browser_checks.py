@@ -709,6 +709,19 @@ def test_opening_deal_reveals_cards_one_by_one(r: Runner) -> None:
         assert info[0]["delay"] != info[1]["delay"], f"cards were not staggered: {info}"
 
 
+def test_no_invite_button_at_round_end(r: Runner) -> None:
+    view = r.create(("Ann", "Bob"))
+    state = r.clean(view["id"])
+    state["round_over"] = True
+    state["last_round"] = LAST_ROUND
+    r.store(view["id"], state)
+    with r.page() as page:
+        r.join(page, view, 0)
+        page.wait_for_selector('[data-action="next"]')
+        assert page.locator('#dock [data-action="invite"]').count() == 0
+        assert page.locator("#dock-prompt").inner_text().strip()
+
+
 def test_keyboard_shortcuts_and_guards(r: Runner) -> None:
     """AC-25: h/s/target keys work; inputs and open dialogs swallow shortcuts."""
     view = r.create(("Ann", "Bob"))
@@ -772,6 +785,11 @@ def test_topbar_icon_labels_and_sound_pressed(r: Runner) -> None:
             assert button.get_attribute("aria-label")
             assert button.get_attribute("title")
             assert button.inner_text().strip() in {"❓", "🌐", "🔊", "🔇", "◐", "☀", "☾"}
+        backgrounds = page.evaluate(
+            """() => ['#btn-rules', '#btn-language', '#btn-sound', '#btn-theme']
+                 .map(s => getComputedStyle(document.querySelector(s)).backgroundColor)"""
+        )
+        assert len(set(backgrounds)) == 1, f"sound button looks different from the others: {backgrounds}"
         sound = page.locator("#btn-sound")
         assert sound.get_attribute("aria-pressed") == "true"
         sound.click()

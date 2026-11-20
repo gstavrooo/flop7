@@ -141,8 +141,6 @@ button { font-family: inherit; }
 
 .icon-btn:hover { transform: translate(-1px, -1px); box-shadow: 4px 4px 0 var(--shadow); }
 .icon-btn:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--shadow); }
-/* Bright accent island: keep black icons in both themes. */
-.icon-btn[aria-pressed="true"] { background: var(--green); color: #111; }
 
 /* ---------- setup (6.4) ---------- */
 .storage-hint {

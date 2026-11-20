@@ -475,7 +475,6 @@
     if (game.round_over) {
       els.dockPrompt.textContent = t("dock.break");
       if (anyControl()) els.dockActions.appendChild(makeButton("btn-next", t("action.next"), "next"));
-      els.dockActions.appendChild(makeButton("btn", t("action.invite"), "invite"));
       setWaiting("ready");
       return;
     }

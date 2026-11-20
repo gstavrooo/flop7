@@ -155,9 +155,7 @@ class Runner:
     def ready(page: Page) -> None:
         """Wait until the app has booted and rendered (not just static HTML)."""
         page.wait_for_function(
-            "() => window.Flop7I18n "
-            "&& document.querySelector('#setup-title').textContent.trim().length > 0 "
-            "&& document.querySelector('#dock-prompt').textContent.trim().length > 0"
+            "() => window.Flop7I18n && document.querySelector('#setup-title').textContent.trim().length > 0"
         )
 
     def join(self, page: Page, view: dict, seat: int = 0) -> None:
@@ -770,13 +768,34 @@ def test_invite_links_copy_qr_and_share(r: Runner) -> None:
         assert page.locator('[data-action="share"]').count() == expected
 
 
-def test_setup_dock_prompt_is_not_duplicated(r: Runner) -> None:
+def test_setup_dock_has_start_button_without_prompt(r: Runner) -> None:
     with r.page(MOBILE) as page:
         page.goto(r.base_url + "/")
         r.ready(page)
         assert page.locator("#dock-round").inner_text().strip() == ""
-        assert page.locator("#dock-prompt").is_visible()
-        assert page.locator("#dock").inner_text().count("Set up a game to begin") == 1
+        assert page.locator("#dock-prompt").inner_text().strip() == ""
+        start = page.locator("#dock #btn-start")
+        assert start.is_visible()
+        assert start.inner_text().strip().lower() == "start game"
+        assert page.locator("#setup-form #btn-start").count() == 0
+
+
+def test_tagline_uses_the_same_action_words_as_the_buttons(r: Runner) -> None:
+    with r.page() as page:
+        page.goto(r.base_url + "/")
+        r.ready(page)
+        for language in ("en", "de"):
+            page.evaluate("lang => Flop7I18n.setLanguage(lang)", language)
+            words = page.evaluate(
+                """() => {
+                     const d = Flop7I18n.dictionaries[Flop7I18n.getLanguage()];
+                     return { tagline: d.tagline, hit: d['action.hit'], stay: d['action.stay'] };
+                   }"""
+            )
+            tagline = words["tagline"].lower()
+            assert words["hit"].lower() in tagline, words
+            assert words["stay"].lower() in tagline, words
+            assert "bank" not in tagline and "sicher" not in tagline, words
 
 
 def test_invite_url_box_shows_the_whole_link(r: Runner) -> None:

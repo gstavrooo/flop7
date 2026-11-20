@@ -66,7 +66,7 @@
     setupScreen: $("setup-screen"), tableScreen: $("table-screen"),
     form: $("setup-form"), names: $("names"), botChip: $("bot-chip"),
     addBot: $("add-bot"), hotseat: $("hotseat"), preview: $("participant-preview"),
-    setupError: $("setup-error"), btnStart: $("btn-start"),
+    setupError: $("setup-error"),
     players: $("players"), dealHint: $("deal-hint"), winnerBanner: $("winner-banner"),
     winnerTitle: $("winner-title"), winnerMargin: $("winner-margin"),
     summary: $("round-summary"), summaryTitle: $("round-summary-title"),
@@ -524,11 +524,13 @@
   function renderDock() {
     els.dockActions.textContent = "";
     if (!game) {
-      // The prompt already says "set up a game": showing it in the round slot too
-      // would duplicate the message (the round slot stays empty until a game exists).
+      // The bottom bar is the setup call to action; no prompt text needed.
       els.dockRound.textContent = "";
-      els.dockPrompt.textContent = t("dock.setup");
+      els.dockPrompt.textContent = "";
       els.dockDeck.textContent = "";
+      const start = makeButton("btn btn-primary", t("setup.start"), "start");
+      start.id = "btn-start"; // stable hook for keyboard/mobile checks
+      els.dockActions.appendChild(start);
       setWaiting("none");
       return;
     }
@@ -953,7 +955,10 @@
     const button = event.target.closest("button[data-action]");
     if (!button) return;
     const action = button.getAttribute("data-action");
-    if (action === "hit" || action === "stay" || action === "next") doMove(action);
+    if (action === "start") {
+      if (els.form.requestSubmit) els.form.requestSubmit();
+      else createGame({ preventDefault: function () {} });
+    } else if (action === "hit" || action === "stay" || action === "next") doMove(action);
     else if (action === "target") doMove("target", Number(button.getAttribute("data-value")));
     else if (action === "rematch") rematch();
     else if (action === "invite") openInvites();

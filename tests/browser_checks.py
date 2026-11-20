@@ -615,6 +615,90 @@ def test_connection_lost_chip_after_delay(r: Runner) -> None:
         assert "connection" in chip.inner_text().lower()
 
 
+def test_cold_start_wake_banner_on_delayed_create(r: Runner) -> None:
+    """A sleeping host shows a translated wake hint while the first request is stalled."""
+    with r.page() as page:
+
+        def slow_create(route: Any) -> None:
+            time.sleep(6)  # simulate the ~1 min cold start without waiting a minute
+            route.continue_()
+
+        page.route("**/api/games", slow_create)
+        page.goto(r.base_url + "/")
+        r.ready(page)
+        page.evaluate(
+            """() => {
+              window.__wake = { shown: 0, hidden: 0, text: '' };
+              const el = document.getElementById('wake-banner');
+              new MutationObserver(() => {
+                if (!el.hidden && !window.__wake.shown) {
+                  window.__wake.shown = performance.now();
+                  window.__wake.text = el.textContent;
+                }
+                if (el.hidden && window.__wake.shown && !window.__wake.hidden) {
+                  window.__wake.hidden = performance.now();
+                }
+              }).observe(el, { attributes: true, attributeFilter: ['hidden'] });
+            }"""
+        )
+        page.locator("#names").fill("Ann, Bob")
+        page.evaluate("() => { window.__start = performance.now(); }")
+        page.locator("#btn-start").click()
+        page.wait_for_selector("#table-screen:not([hidden])", timeout=20000)
+        wake = page.evaluate("() => Object.assign({}, window.__wake, { start: window.__start })")
+        assert wake["shown"] > 0, "no wake banner during the stalled create request"
+        assert 4000 <= wake["shown"] - wake["start"] <= 9000, "wake banner timing is wrong"
+        assert "Waking up" in wake["text"], f"unexpected wake text: {wake['text']!r}"
+        assert wake["hidden"] > wake["shown"], "wake banner was never cleared"
+
+
+def test_failed_create_offers_translated_retry(r: Runner) -> None:
+    """A failed POST never auto-retries but offers an explicit, translated retry action."""
+    with r.page() as page:
+        calls = {"count": 0}
+
+        def flaky_create(route: Any) -> None:
+            calls["count"] += 1
+            if calls["count"] == 1:
+                route.abort()
+            else:
+                route.continue_()
+
+        page.route("**/api/games", flaky_create)
+        page.goto(r.base_url + "/")
+        r.ready(page)
+        page.locator("#names").fill("Ann, Bob")
+        page.locator("#btn-start").click()
+        page.wait_for_selector("#toast:not([hidden])", timeout=10000)
+        retry = page.locator("#toast-retry")
+        assert retry.is_visible(), "no retry action after a failed create"
+        assert retry.inner_text() == "Try again"
+        assert calls["count"] == 1, "a POST must not be auto-retried"
+        retry.click()
+        page.wait_for_selector("#table-screen:not([hidden])", timeout=10000)
+        assert calls["count"] == 2
+
+
+def test_safe_get_retries_after_network_error(r: Runner) -> None:
+    """GETs recover from a transient cold-start error without showing an error toast."""
+    view = r.create(("Ann", "Bob"))
+    with r.page() as page:
+        calls = {"count": 0}
+
+        def flaky_state(route: Any) -> None:
+            calls["count"] += 1
+            if calls["count"] == 1:
+                route.abort()
+            else:
+                route.continue_()
+
+        page.route(f"**/api/games/{view['id']}", flaky_state)
+        r.join(page, view, 0)
+        page.wait_for_selector("#table-screen:not([hidden])", timeout=10000)
+        assert calls["count"] == 2, "the safe GET was not retried once"
+        assert page.locator("#toast").is_hidden()
+
+
 def test_stale_move_toast_and_reload(r: Runner) -> None:
     """AC-21: a 409 shows a translated toast and reloads state, never a double draw."""
     view = r.create(("Ann", "Bob"))

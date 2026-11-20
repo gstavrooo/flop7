@@ -47,6 +47,12 @@
   let busy = false;
   let soundOn = Storage.get("sound") !== false;
   let audioCtx = null;
+  // Opening deals arrive as one view; remember which cards are new so they can be
+  // revealed one by one instead of appearing all at once (see renderPlayers).
+  let lastSeatCards = null;
+  let cardDealAt = {};
+  const DEAL_STEP_MS = 180;
+  const DEAL_DURATION_MS = 380;
 
   const $ = function (id) { return document.getElementById(id); };
   const els = {
@@ -206,6 +212,7 @@
   // ---- view / events ----
   function applyView(view) {
     const first = game === null;
+    if (first || view.id !== gameId) { lastSeatCards = null; cardDealAt = {}; }
     game = view;
     gameId = view.id;
     if (first && view.events && view.events.length) lastEventId = maxId(view.events);
@@ -217,6 +224,7 @@
     events.forEach(function (event) {
       if (typeof event.id === "number" && event.id > lastEventId) {
         lastEventId = event.id;
+        if (event.type === "next") lastSeatCards = null; // a fresh round starts empty
         if (soundOn) beep(event.type);
       }
     });
@@ -268,10 +276,12 @@
       els.players.textContent = "";
       els.summary.hidden = true;
       els.winnerBanner.hidden = true;
+      lastSeatCards = null;
+      cardDealAt = {};
     }
     renderDock();
     updateTitle();
-    if (els.inviteDialog.open) renderInviteList();
+    if (els.inviteDialog.open) { renderInviteList(); fitInviteLinks(); }
   }
 
   function renderTopbar() {
@@ -314,8 +324,42 @@
     return null;
   }
 
+  function dealKey(seat, index, value) {
+    return gameId + ":" + game.round + ":" + seat + ":" + index + ":" + value;
+  }
+
   function renderPlayers() {
     els.players.textContent = "";
+    const current = game.players.map(function (player) {
+      return player.numbers.concat(player.mods).map(String);
+    });
+    const fresh = current.map(function (cards, seat) {
+      const previous = (lastSeatCards && lastSeatCards[seat]) || [];
+      return cards.map(function (card, index) {
+        return index >= previous.length || previous[index] !== card;
+      });
+    });
+
+    // The engine deals in turn order. Reveal freshly dealt cards one by one in
+    // that order so the opening deal is visible. A re-render reuses the absolute
+    // start times; a negative CSS animation-delay resumes instead of restarting.
+    const now = Date.now();
+    const count = game.players.length;
+    const freshList = [];
+    fresh.forEach(function (flags, seat) {
+      flags.forEach(function (isFresh, index) {
+        if (isFresh) freshList.push({ seat: seat, index: index, order: (seat - game.turn + count) % count });
+      });
+    });
+    freshList.sort(function (a, b) { return a.order - b.order || a.index - b.index; });
+    freshList.forEach(function (entry, step) {
+      const key = dealKey(entry.seat, entry.index, current[entry.seat][entry.index]);
+      if (cardDealAt[key] === undefined) cardDealAt[key] = now + step * DEAL_STEP_MS;
+    });
+    Object.keys(cardDealAt).forEach(function (key) {
+      if (cardDealAt[key] < now - (DEAL_DURATION_MS + 2000)) delete cardDealAt[key];
+    });
+
     game.players.forEach(function (player, seat) {
       const card = el("div", "player-card");
       if (!game.round_over && game.winner === null && seat === game.turn) card.classList.add("is-turn");
@@ -347,17 +391,24 @@
 
       const newest = newestCardFor(seat);
       const cards = el("div", "cards");
-      player.numbers.concat(player.mods).forEach(function (value) {
-        const kind = typeof value === "number" ? "number" : value.startsWith("+") ? "plus" : value === "x2" ? "x2" : "action";
-        const button = el("button", "card card-" + kind + (value === newest ? " card-new" : ""), String(value));
+      player.numbers.concat(player.mods).forEach(function (value, index) {
+        const text = String(value);
+        const kind = typeof value === "number" ? "number" : text.startsWith("+") ? "plus" : text === "x2" ? "x2" : "action";
+        const button = el("button", "card card-" + kind + (value === newest ? " card-new" : ""), text);
+        const dealAt = cardDealAt[dealKey(seat, index, text)];
+        if (dealAt !== undefined) {
+          button.classList.add("card-deal");
+          button.style.animationDelay = (dealAt - Date.now()) + "ms";
+        }
         button.type = "button";
-        button.setAttribute("data-card", String(value));
-        button.setAttribute("aria-label", t("newCard", { card: String(value) }));
+        button.setAttribute("data-card", text);
+        button.setAttribute("aria-label", t("newCard", { card: text }));
         cards.appendChild(button);
       });
       card.appendChild(cards);
       els.players.appendChild(card);
     });
+    lastSeatCards = current;
   }
 
   function renderSummary() {
@@ -400,9 +451,9 @@
   function renderDock() {
     els.dockActions.textContent = "";
     if (!game) {
-      els.dockRound.setAttribute("data-i18n", "dock.setup");
-      els.dockRound.textContent = t("dock.setup");
-      els.dockPrompt.setAttribute("data-i18n", "dock.setup");
+      // The prompt already says "set up a game": showing it in the round slot too
+      // would duplicate the message (the round slot stays empty until a game exists).
+      els.dockRound.textContent = "";
       els.dockPrompt.textContent = t("dock.setup");
       els.dockDeck.textContent = "";
       setWaiting("none");
@@ -572,11 +623,12 @@
       row.appendChild(head);
 
       const link = inviteUrl(entry.seat, entry.token);
-      const input = el("input");
-      input.type = "text";
+      const input = el("textarea", "invite-link");
       input.readOnly = true;
+      input.rows = 2;
       input.value = link;
       input.setAttribute("aria-label", t("invite.seat", { n: entry.seat + 1, name: entry.name }));
+      input.addEventListener("focus", function () { input.select(); });
       row.appendChild(input);
 
       const actions = el("div", "invite-row-actions");
@@ -591,6 +643,17 @@
       slot.hidden = true;
       row.appendChild(slot);
       els.inviteList.appendChild(row);
+    });
+  }
+
+  // A wrapped textarea shows the whole (long) invite URL; size it to its content.
+  function fitInviteLinks() {
+    els.inviteList.querySelectorAll("textarea.invite-link").forEach(function (input) {
+      input.style.height = "auto";
+      // scrollHeight excludes borders; height is border-box, so add them back.
+      const style = window.getComputedStyle(input);
+      const borders = parseFloat(style.borderTopWidth) + parseFloat(style.borderBottomWidth);
+      input.style.height = Math.max(input.scrollHeight + borders, 40) + "px";
     });
   }
 
@@ -631,6 +694,7 @@
   function openInvites() {
     renderInviteList();
     if (!els.inviteDialog.open) els.inviteDialog.showModal();
+    fitInviteLinks();
   }
 
   function openRules() {

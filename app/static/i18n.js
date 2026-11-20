@@ -136,7 +136,7 @@
   });
 
   const DE = Object.freeze({
-    "tagline": "Versuch dein Glück. Ziehen, bleiben, gewinnen.",
+    "tagline": "Versuch dein Glück. Noch eine, Stopp, gewinn.",
     "nav.rules": "Regeln",
     "nav.language": "Sprache",
     "nav.soundOn": "Ton an",
@@ -166,7 +166,7 @@
 
     "dock.round": "Runde {round}",
     "dock.deck": "Stapel: {count}",
-    "dock.yourTurn": "Du bist dran — ziehen oder bleiben.",
+    "dock.yourTurn": "Du bist dran — Noch eine oder Stopp.",
     "dock.thinking": "{name} überlegt …",
     "dock.waiting": "Warten auf {name} …",
     "dock.target": "Wähle ein Ziel für {card}:",
@@ -176,7 +176,7 @@
 
     "table.total": "Gesamt: {total} / 200",
     "table.score": "Runde: {score}",
-    "table.numbers": "{count} / 7 verschiedene Zahlen",
+    "table.numbers": "{count} / 7 verschiedene Zahlenkarten",
     "table.second": "Second Chance bereit",
     "table.you": "du",
     "table.dealHint": "Erstverteilung: Jeder Spieler beginnt mit einer offenen Karte.",
@@ -188,8 +188,8 @@
     "status.finished": "Runde beendet",
     "newCard": "Neue Karte: {card}",
 
-    "action.hit": "Ziehen",
-    "action.stay": "Bleiben",
+    "action.hit": "Noch eine",
+    "action.stay": "Stopp",
     "action.next": "Nächste Runde",
     "action.rematch": "Revanche",
     "action.invite": "Einladen",
@@ -222,13 +222,13 @@
 
     "rules.title": "Spielanleitung",
     "rules.turnTitle": "Dein Zug",
-    "rules.turn": "Ziehen nimmt eine Karte, Bleiben sichert deine Punkte. Die Plätze wechseln Karte für Karte.",
+    "rules.turn": "„Noch eine“ gibt dir eine weitere Karte; „Stopp“ beendet deine Runde und sichert deine Punkte. Die Plätze wechseln Karte für Karte.",
     "rules.duplicateTitle": "Doppelte Zahlen",
-    "rules.duplicate": "Ziehst du eine Zahl, die du schon hast, bist du verzockt (0 Punkte) — außer eine Second Chance schützt dich.",
-    "rules.modifiersTitle": "Modifikatoren",
-    "rules.modifiers": "+N addiert sofort N Punkte. x2 verdoppelt deine Zahlen, bevor +N addiert wird.",
+    "rules.duplicate": "Ziehst du eine Zahlenkarte, die du schon hast, bist du verzockt (0 Punkte) — außer eine Second Chance schützt dich.",
+    "rules.modifiersTitle": "Bonuskarten",
+    "rules.modifiers": "+N-Bonuskarten addieren sofort N Punkte. Die x2-Bonuskarte verdoppelt die Summe deiner Zahlenkarten, danach kommen die +N-Bonuskarten dazu.",
     "rules.flop7Title": "Flip 7",
-    "rules.flop7": "Halte 7 verschiedene Zahlen für +15 Punkte — die Runde endet sofort für alle.",
+    "rules.flop7": "Halte 7 verschiedene Zahlenkarten für +15 Punkte — die Runde endet sofort für alle.",
     "rules.actionsTitle": "Aktionskarten",
     "rules.actions": "Freeze sichert die Punkte eines Ziels und lässt es aussteigen. Flip Three lässt ein Ziel bis zu drei Karten ziehen. Second Chance rettet vor einem Verzocken. Aktionskarten aus Flip Three spielt das Ziel danach.",
     "rules.targetTitle": "Ziele",
@@ -238,12 +238,12 @@
     "rules.winTitle": "Gewinnen",
     "rules.win": "Wer zuerst 200+ Punkte hat und allein führt, gewinnt. Bei Gleichstand ab 200 gibt es eine weitere Runde.",
     "card.title": "Kartenerklärung",
-    "card.number": "Eine Zahl addiert ihren Wert zu deinen Punkten. Ziehst du sie doppelt, bist du verzockt — außer mit Second Chance.",
-    "card.plus": "+N addiert sofort N Punkte zu deinen Rundenpunkten.",
-    "card.x2": "x2 verdoppelt die Summe deiner Zahlen; +N-Modifikatoren kommen danach dazu.",
+    "card.number": "Eine Zahlenkarte addiert ihren Wert zu deinen Punkten. Ziehst du sie doppelt, bist du verzockt — außer mit Second Chance.",
+    "card.plus": "+N-Bonuskarte addiert sofort N Punkte zu deinen Rundenpunkten.",
+    "card.x2": "x2 verdoppelt die Summe deiner Zahlenkarten; +N-Bonuskarten kommen danach dazu.",
     "card.freeze": "Freeze lässt das gewählte Ziel seine Punkte sichern und für den Rest der Runde aussteigen.",
     "card.flip3": "Flip Three lässt das gewählte Ziel bis zu drei Karten ziehen; gezogene Aktionskarten werden danach gespielt.",
-    "card.second": "Second Chance rettet dich in dieser Runde vor einer doppelten Zahl, dann wird sie abgelegt.",
+    "card.second": "Second Chance rettet dich in dieser Runde vor einer doppelten Zahlenkarte, dann wird sie abgelegt.",
 
     "leave.confirm": "Dieses unfertige Spiel verlassen?",
     "error.network": "Server nicht erreichbar.",

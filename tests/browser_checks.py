@@ -495,6 +495,7 @@ def test_dock_touch_targets_on_mobile(r: Runner) -> None:
         start = page.locator("#btn-start").bounding_box()
         assert start and start["height"] >= 44
         view = r.create(("Ann", "Bob"))
+        r.store(view["id"], r.clean(view["id"]))  # deterministic: no random deal-time action
         r.join(page, view, 0)
         page.wait_for_selector('[data-action="hit"]')
         for selector in ('[data-action="hit"]', '[data-action="stay"]'):
@@ -659,7 +660,9 @@ def test_invite_links_copy_qr_and_share(r: Runner) -> None:
         assert img.get_attribute("alt")
 
         other.locator('[data-action="copy"]').click()
-        page.wait_for_function("() => document.querySelector('#invite-feedback').textContent.trim().length > 0")
+        page.wait_for_function(
+            "() => document.querySelector('#invite-feedback').textContent.trim().length > 0"
+        )
         assert page.locator("#invite-feedback").is_visible()
         expected = 1 if page.evaluate("() => !!navigator.share") else 0
         assert page.locator('[data-action="share"]').count() == expected
@@ -739,7 +742,9 @@ def test_copy_feedback_stays_inside_invite_dialog(r: Runner) -> None:
             "value: {writeText: () => Promise.resolve()}})"
         )
         button.click()
-        page.wait_for_function("() => document.querySelector('#invite-feedback').textContent.includes('copied')")
+        page.wait_for_function(
+            "() => document.querySelector('#invite-feedback').textContent.includes('copied')"
+        )
         assert page.locator("#invite-feedback").is_visible()
         assert button.inner_text().strip().lower() == "link copied"
 
@@ -748,7 +753,9 @@ def test_copy_feedback_stays_inside_invite_dialog(r: Runner) -> None:
             "value: {writeText: () => Promise.reject(new Error('denied'))}})"
         )
         button.click()
-        page.wait_for_function("() => document.querySelector('#invite-feedback').textContent.includes('failed')")
+        page.wait_for_function(
+            "() => document.querySelector('#invite-feedback').textContent.includes('failed')"
+        )
         field = page.locator(".invite-row").nth(1).locator("textarea.invite-link")
         assert field.evaluate(
             "e => document.activeElement === e && e.selectionEnd - e.selectionStart === e.value.length"

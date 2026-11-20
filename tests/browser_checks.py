@@ -495,6 +495,7 @@ def test_dock_touch_targets_on_mobile(r: Runner) -> None:
         start = page.locator("#btn-start").bounding_box()
         assert start and start["height"] >= 44
         view = r.create(("Ann", "Bob"))
+        r.store(view["id"], r.clean(view["id"]))  # deterministic: no random deal-time action
         r.join(page, view, 0)
         page.wait_for_selector('[data-action="hit"]')
         for selector in ('[data-action="hit"]', '[data-action="stay"]'):
@@ -659,7 +660,9 @@ def test_invite_links_copy_qr_and_share(r: Runner) -> None:
         assert img.get_attribute("alt")
 
         other.locator('[data-action="copy"]').click()
-        page.wait_for_function("() => document.querySelector('#invite-feedback').textContent.trim().length > 0")
+        page.wait_for_function(
+            "() => document.querySelector('#invite-feedback').textContent.trim().length > 0"
+        )
         assert page.locator("#invite-feedback").is_visible()
         expected = 1 if page.evaluate("() => !!navigator.share") else 0
         assert page.locator('[data-action="share"]').count() == expected
@@ -692,13 +695,14 @@ def test_invite_url_box_shows_the_whole_link(r: Runner) -> None:
 
 
 def test_opening_deal_reveals_cards_one_by_one(r: Runner) -> None:
+    view = r.create(("Ann", "Bob"))
+    state = r.clean(view["id"])
+    state["players"][0]["numbers"] = [5]
+    state["players"][1]["numbers"] = [6]
+    r.store(view["id"], state)
     with r.page() as page:
-        page.goto(r.base_url + "/")
-        r.ready(page)
-        page.locator("#names").fill("Ann, Bob")
-        page.locator("#btn-start").click()
+        r.join(page, view, 0)
         page.wait_for_function("() => document.querySelectorAll('.player-card .card').length === 2")
-        assert page.locator("#invite-dialog").evaluate("d => !d.open"), "invite dialog covered the deal"
         assert page.locator("#deal-hint").is_visible()
         info = page.evaluate(
             """() => [...document.querySelectorAll('.player-card .card')].map(c => {
@@ -709,6 +713,16 @@ def test_opening_deal_reveals_cards_one_by_one(r: Runner) -> None:
         assert len(info) == 2
         assert all(x["name"] == "card-deal" for x in info), f"deal animation missing: {info}"
         assert info[0]["delay"] != info[1]["delay"], f"cards were not staggered: {info}"
+
+
+def test_invite_dialog_waits_for_the_deal(r: Runner) -> None:
+    with r.page() as page:
+        page.goto(r.base_url + "/")
+        r.ready(page)
+        page.locator("#names").fill("Ann, Bob")
+        page.locator("#btn-start").click()
+        page.wait_for_selector("#table-screen:not([hidden])")
+        assert page.locator("#invite-dialog").evaluate("d => !d.open"), "invite dialog covered the deal"
         page.wait_for_selector("#invite-dialog[open]")
 
 
@@ -739,7 +753,9 @@ def test_copy_feedback_stays_inside_invite_dialog(r: Runner) -> None:
             "value: {writeText: () => Promise.resolve()}})"
         )
         button.click()
-        page.wait_for_function("() => document.querySelector('#invite-feedback').textContent.includes('copied')")
+        page.wait_for_function(
+            "() => document.querySelector('#invite-feedback').textContent.includes('copied')"
+        )
         assert page.locator("#invite-feedback").is_visible()
         assert button.inner_text().strip().lower() == "link copied"
 
@@ -748,7 +764,9 @@ def test_copy_feedback_stays_inside_invite_dialog(r: Runner) -> None:
             "value: {writeText: () => Promise.reject(new Error('denied'))}})"
         )
         button.click()
-        page.wait_for_function("() => document.querySelector('#invite-feedback').textContent.includes('failed')")
+        page.wait_for_function(
+            "() => document.querySelector('#invite-feedback').textContent.includes('failed')"
+        )
         field = page.locator(".invite-row").nth(1).locator("textarea.invite-link")
         assert field.evaluate(
             "e => document.activeElement === e && e.selectionEnd - e.selectionStart === e.value.length"

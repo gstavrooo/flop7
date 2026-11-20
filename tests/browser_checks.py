@@ -797,6 +797,17 @@ def test_tagline_uses_the_same_action_words_as_the_buttons(r: Runner) -> None:
             assert words["stay"].lower() in tagline, words
             assert "bank" not in tagline and "sicher" not in tagline, words
 
+        # German uses the official rulebook terms: Noch eine / Stopp / Bonuskarten.
+        official = page.evaluate(
+            """() => {
+                 const d = Flop7I18n.dictionaries.de;
+                 return [d['action.hit'], d['action.stay'], d.tagline, d['rules.modifiersTitle']];
+               }"""
+        )
+        assert official[:2] == ["Noch eine", "Stopp"], official
+        assert "noch eine" in official[2].lower() and "stopp" in official[2].lower(), official
+        assert official[3] == "Bonuskarten", official
+
 
 def test_invite_url_box_shows_the_whole_link(r: Runner) -> None:
     with r.page() as page:

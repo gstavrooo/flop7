@@ -19,6 +19,7 @@
   --stayed: #8ee6f0;
   --shadow-offset: 5px;
   --border-width: 3px;
+  --dock-height: 200px;
   font-family: "Courier New", ui-monospace, monospace;
   color: var(--ink);
   background: var(--paper);
@@ -61,7 +62,7 @@
 body {
   margin: 0;
   min-height: 100vh;
-  padding-bottom: 220px; /* room for the pinned dock */
+  padding-bottom: calc(var(--dock-height) + 20px); /* room for the pinned dock */
   color: var(--ink);
   background-color: var(--paper);
   background-image: radial-gradient(var(--dot) 1px, transparent 1px);
@@ -233,11 +234,14 @@ button { font-family: inherit; }
 
 .player-card {
   position: relative;
+  display: flex;
+  flex-direction: column;
   padding: 14px;
   background: var(--surface);
   border: var(--border-width) solid var(--border);
   box-shadow: var(--shadow-offset) var(--shadow-offset) 0 var(--shadow);
-  min-height: 170px;
+  /* Fixed height: drawing cards or gaining a badge must not resize the grid. */
+  height: 230px;
 }
 .player-card.is-turn { background: var(--yellow); color: #111; }
 .player-card.is-mine { outline: 3px dashed var(--ink); outline-offset: 3px; }
@@ -257,9 +261,10 @@ button { font-family: inherit; }
 .player-line { font-size: 13px; margin: 3px 0; }
 .player-line strong { font-weight: bold; }
 
+/* A reserved row keeps badges from growing the card when they appear. */
+.player-status { min-height: 28px; margin-top: 4px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .status-badge {
   display: inline-block;
-  margin-top: 6px;
   padding: 3px 8px;
   font-size: 12px;
   font-weight: bold;
@@ -276,7 +281,16 @@ button { font-family: inherit; }
 .progress-step { width: 14px; height: 8px; border: 2px solid #111; background: transparent; }
 .progress-step.filled { background: #111; }
 
-.cards { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.cards {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 6px;
+  margin-top: 8px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
 .card {
   min-width: 34px;
   min-height: 34px;
@@ -303,6 +317,7 @@ button { font-family: inherit; }
 .second-flag { font-weight: bold; color: #111; background: var(--green); border: 2px solid #111; padding: 2px 6px; }
 .deal-hint {
   margin: 14px 0 0;
+  min-height: 35px; /* reserved so showing it does not shift the page */
   padding: 8px 10px;
   font-size: 13px;
   font-weight: bold;
@@ -310,6 +325,7 @@ button { font-family: inherit; }
   background: var(--green);
   border: 2px solid #111;
 }
+.deal-hint.is-placeholder { visibility: hidden; }
 
 /* ---------- round summary + winner (6.5) ---------- */
 .round-summary {
@@ -347,7 +363,7 @@ button { font-family: inherit; }
   right: 0;
   bottom: 0;
   z-index: 30;
-  height: 200px;
+  height: var(--dock-height);
   padding: 10px 16px 0;
   background: var(--surface);
   border-top: var(--border-width) solid var(--border);
@@ -370,7 +386,7 @@ button { font-family: inherit; }
 .toast {
   position: fixed;
   left: 50%;
-  bottom: 220px;
+  bottom: calc(var(--dock-height) + 20px);
   transform: translateX(-50%);
   z-index: 60;
   max-width: min(90vw, 520px);
@@ -435,8 +451,7 @@ button { font-family: inherit; }
 .dialog::backdrop { background: rgba(0, 0, 0, 0.55); }
 .dialog-title { font-size: 22px; margin: 0 0 12px; }
 .dialog-hint { color: var(--muted); margin: 0 0 14px; font-size: 13px; }
-.invite-feedback { margin: 0 0 10px; font-weight: bold; }
-.invite-feedback:empty { display: none; }
+.invite-feedback { margin: 0 0 10px; min-height: 1.4em; font-weight: bold; }
 .dialog-body { white-space: pre-line; margin: 0 0 16px; }
 .rules-list { display: grid; gap: 12px; margin: 0 0 16px; padding-left: 22px; }
 .rules-list li { line-height: 1.35; }
@@ -487,6 +502,23 @@ button { font-family: inherit; }
   .dock-prompt { font-size: 14px; min-height: 2.2em; }
   .dock .btn { flex: 1 1 auto; }
   .waiting-bar { margin-left: -12px; margin-right: -12px; }
+  .player-card { height: 200px; padding: 10px; }
+  .player-name { font-size: 15px; }
+  .dialog { padding: 14px; }
+  #invite-dialog { width: calc(100vw - 20px); }
+  .dialog-actions { flex-wrap: wrap; }
+  .rules-list { gap: 10px; padding-left: 18px; }
+  .rules-list span { font-size: 12px; }
+}
+
+/* Landscape phones and short windows: keep the dock and dialogs usable. */
+@media (max-height: 560px) {
+  :root { --dock-height: 140px; }
+  .topbar { padding: 6px 10px; }
+  .icon-btn { width: 34px; height: 34px; font-size: 16px; }
+  .dock { padding-top: 6px; }
+  .dock-prompt { min-height: 1.6em; margin: 4px 0; font-size: 14px; }
+  .dialog { max-height: 92vh; }
 }
 
 @media (prefers-reduced-motion: reduce) {

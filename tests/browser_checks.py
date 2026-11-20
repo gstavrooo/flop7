@@ -442,6 +442,24 @@ def test_language_theme_and_rules_round_trip(r: Runner) -> None:
         assert page.locator("#rules-dialog").is_hidden()
 
 
+def test_rules_are_grouped_and_translated(r: Runner) -> None:
+    with r.page() as page:
+        page.goto(r.base_url + "/")
+        r.ready(page)
+        page.keyboard.press("?")
+        page.wait_for_selector("#rules-dialog[open]")
+        assert page.locator("#rules-dialog .dialog-body").count() == 0
+        items = page.locator("#rules-dialog .rules-list li")
+        assert items.count() >= 7
+        headings = page.locator("#rules-dialog .rules-list strong").all_inner_texts()
+        assert all(heading.strip() for heading in headings)
+        assert "your turn" in [heading.lower() for heading in headings], headings
+        page.evaluate("() => Flop7I18n.setLanguage('de')")
+        german = page.locator("#rules-dialog .rules-list strong").all_inner_texts()
+        assert "dein zug" in [heading.lower() for heading in german]
+        page.evaluate("() => Flop7I18n.setLanguage('en')")
+
+
 def test_dark_mode_neutral_history(r: Runner) -> None:
     view = r.create(("Ann", "Bob"))
     state = r.clean(view["id"])
@@ -823,6 +841,33 @@ def test_no_invite_button_at_round_end(r: Runner) -> None:
         assert page.locator("#dock-prompt").inner_text().strip()
 
 
+def test_dock_text_and_buttons_are_centered(r: Runner) -> None:
+    view = r.create(("Ann", "Bob"))
+    r.store(view["id"], r.clean(view["id"]))
+    with r.page() as page:
+        r.join(page, view, 0)
+        page.wait_for_selector('[data-action="hit"]')
+        styles = page.evaluate(
+            """() => ({
+                 prompt: getComputedStyle(document.querySelector('#dock-prompt')).textAlign,
+                 actions: getComputedStyle(document.querySelector('#dock-actions')).justifyContent,
+                 top: getComputedStyle(document.querySelector('.dock-top')).justifyContent
+               })"""
+        )
+        assert styles == {"prompt": "center", "actions": "center", "top": "center"}, styles
+        centers = page.evaluate(
+            """() => {
+                 const dock = document.querySelector('#dock').getBoundingClientRect();
+                 const buttons = [...document.querySelectorAll('#dock-actions button')]
+                   .map(b => b.getBoundingClientRect());
+                 const left = Math.min(...buttons.map(b => b.left));
+                 const right = Math.max(...buttons.map(b => b.right));
+                 return { dock: dock.left + dock.width / 2, group: (left + right) / 2 };
+               }"""
+        )
+        assert abs(centers["dock"] - centers["group"]) <= 3, centers
+
+
 def test_copy_feedback_stays_inside_invite_dialog(r: Runner) -> None:
     with r.page() as page:
         page.goto(r.base_url + "/")
@@ -859,6 +904,7 @@ def test_copy_feedback_stays_inside_invite_dialog(r: Runner) -> None:
 
 def test_spectator_sees_watching_prompt(r: Runner) -> None:
     view = r.create(("Ann", "Bob"))
+    r.store(view["id"], r.clean(view["id"]))  # deterministic: no random deal-time action
     with r.page() as page:
         page.goto(r.base_url + "/?game=" + view["id"])
         r.ready(page)

@@ -78,7 +78,11 @@
       <div class="waiting-bar" aria-hidden="true"><span id="waiting-fill" class="waiting-fill"></span></div>
     </section>
 
-    <div id="toast" class="toast" role="alert" hidden></div>
+    <div id="toast" class="toast" role="alert" hidden>
+      <span id="toast-text"></span>
+      <button id="toast-retry" class="toast-retry" type="button" hidden data-i18n="action.tryAgain"></button>
+    </div>
+    <div id="wake-banner" class="wake-banner" role="status" hidden data-i18n="connection.waking"></div>
     <div id="connection-chip" class="connection-chip" role="status" hidden data-i18n="connection.lost"></div>
 
     <dialog id="invite-dialog" class="dialog">

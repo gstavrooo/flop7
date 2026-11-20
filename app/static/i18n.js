@@ -73,6 +73,8 @@
     "tie.title": "It's a tie — another round!",
 
     "connection.lost": "Connection lost — reconnecting …",
+    "connection.waking": "Waking up the table — the first request can take a minute …",
+    "action.tryAgain": "Try again",
     "storage.unavailable": "Browser storage is blocked — invites and settings last only until this tab closes.",
     "toast.closed": "Close",
 
@@ -187,6 +189,8 @@
     "tie.title": "Unentschieden — eine weitere Runde!",
 
     "connection.lost": "Verbindung verloren — erneuter Versuch …",
+    "connection.waking": "Der Tisch wird geweckt — die erste Anfrage kann eine Minute dauern …",
+    "action.tryAgain": "Erneut versuchen",
     "storage.unavailable": "Browser-Speicher blockiert — Einladungen und Einstellungen gelten nur bis zum Schließen dieses Tabs.",
     "toast.closed": "Schließen",
 

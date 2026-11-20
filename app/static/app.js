@@ -55,6 +55,11 @@
   let newCardUntil = {};
   const DEAL_STEP_MS = 180;
   const DEAL_DURATION_MS = 380;
+  // A sleeping free-tier host can take ~1 min to answer the first request.
+  const WAKE_DELAY_MS = 5000;
+  const SAFE_RETRY_DELAYS_MS = [1500, 3000];
+  let pendingRequests = 0;
+  let retryFn = null;
 
   const $ = function (id) { return document.getElementById(id); };
   const els = {
@@ -69,7 +74,8 @@
     dockRound: $("dock-round"), dockDeck: $("dock-deck"),
     dockPrompt: $("dock-prompt"), dockActions: $("dock-actions"),
     waitingFill: $("waiting-fill"),
-    toast: $("toast"), chip: $("connection-chip"), storageHint: $("storage-hint"),
+    toast: $("toast"), toastText: $("toast-text"), toastRetry: $("toast-retry"),
+    wake: $("wake-banner"), chip: $("connection-chip"), storageHint: $("storage-hint"),
     btnRules: $("btn-rules"), btnLanguage: $("btn-language"),
     btnSound: $("btn-sound"), btnTheme: $("btn-theme"),
     inviteDialog: $("invite-dialog"), inviteList: $("invite-list"),
@@ -85,11 +91,13 @@
     return ids.length ? Math.max.apply(null, ids) : 0;
   }
 
-  function toast(message) {
-    els.toast.textContent = message;
+  function toast(message, retry) {
+    els.toastText.textContent = message;
+    retryFn = typeof retry === "function" ? retry : null;
+    els.toastRetry.hidden = !retryFn;
     els.toast.hidden = false;
     if (toastTimer) clearTimeout(toastTimer);
-    toastTimer = setTimeout(function () { els.toast.hidden = true; }, 3500);
+    toastTimer = setTimeout(function () { els.toast.hidden = true; }, retryFn ? 8000 : 3500);
   }
 
   function setSetupError(message) {
@@ -118,31 +126,73 @@
   }
 
   // ---- network ----
+  function sleep(ms) {
+    return new Promise(function (resolve) { setTimeout(resolve, ms); });
+  }
+
+  function showWake() {
+    if (pendingRequests > 0) els.wake.hidden = false;
+  }
+
   async function api(path, options) {
     options = options || {};
+    const method = (options.method || "GET").toUpperCase();
+    const safe = method === "GET" || method === "HEAD";
     const headers = Object.assign({}, options.headers || {});
     if (options.body) headers["Content-Type"] = "application/json";
-    let response;
+    const delays = safe ? SAFE_RETRY_DELAYS_MS : [];
+    const requestOptions = Object.assign({}, options, { headers: headers });
+    delete requestOptions.retry;
+    pendingRequests += 1;
+    const wakeTimer = setTimeout(showWake, WAKE_DELAY_MS);
     try {
-      response = await fetch(path, Object.assign({}, options, { headers: headers }));
-    } catch (_error) {
-      throw { status: 0, detail: t("error.network") };
+      let error = { status: 0, detail: t("error.network"), retry: options.retry };
+      for (let attempt = 0; attempt <= delays.length; attempt += 1) {
+        if (attempt > 0) await sleep(delays[attempt - 1]);
+        let response;
+        try {
+          response = await fetch(path, requestOptions);
+        } catch (_networkError) {
+          continue;
+        }
+        let data = null;
+        try { data = await response.json(); } catch (_parseError) { data = null; }
+        if (response.ok) return data;
+        error = {
+          status: response.status,
+          detail: (data && data.detail) || ("HTTP " + response.status),
+          retry: options.retry
+        };
+        if (response.status < 500) break;
+      }
+      throw error;
+    } finally {
+      clearTimeout(wakeTimer);
+      pendingRequests = Math.max(0, pendingRequests - 1);
+      if (pendingRequests === 0) els.wake.hidden = true;
     }
-    let data = null;
-    try { data = await response.json(); } catch (_error) { data = null; }
-    if (!response.ok) {
-      throw { status: response.status, detail: (data && data.detail) || ("HTTP " + response.status) };
-    }
-    return data;
   }
+
+  els.toastRetry.addEventListener("click", function () {
+    const fn = retryFn;
+    retryFn = null;
+    els.toastRetry.hidden = true;
+    els.toast.hidden = true;
+    if (!fn) return;
+    Promise.resolve().then(fn).catch(function (err) {
+      toast(translateError(err.detail), err.status === 0 || err.status >= 500 ? fn : null);
+    });
+  });
 
   async function reloadGame() {
     if (!gameId) return;
     try {
-      const view = await api("/api/games/" + encodeURIComponent(gameId));
+      const view = await api("/api/games/" + encodeURIComponent(gameId), {
+        retry: function () { return reloadGame(); }
+      });
       applyView(view);
     } catch (err) {
-      toast(translateError(err.detail));
+      toast(translateError(err.detail), err.retry);
     }
   }
 
@@ -558,13 +608,14 @@
     const options = {
       method: "POST",
       headers: { "X-Seat-Token": tokens[seat] || "" },
-      body: JSON.stringify(body)
+      body: JSON.stringify(body),
+      retry: function () { return doMove(action, target); }
     };
     try {
       const view = await api("/api/games/" + encodeURIComponent(gameId) + "/" + action, options);
       applyView(view);
     } catch (err) {
-      toast(translateError(err.detail));
+      toast(translateError(err.detail), err.retry);
       if (err.status === 409) await reloadGame();
     } finally {
       busy = false;
@@ -572,9 +623,11 @@
     }
   }
 
-  async function startNewGame(names, withBot) {
+  async function startNewGame(names, withBot, after) {
     const view = await api("/api/games", {
-      method: "POST", body: JSON.stringify({ players: names, bot: withBot })
+      method: "POST",
+      body: JSON.stringify({ players: names, bot: withBot }),
+      retry: function () { return startNewGame(names, withBot, after); }
     });
     closeStream();
     tokens = {};
@@ -588,6 +641,7 @@
     lastEventId = 0;
     applyView(view);
     connectStream();
+    if (typeof after === "function") after(view);
     return view;
   }
 
@@ -605,11 +659,13 @@
     mySeat = 0;
     hotseat = els.hotseat.checked;
     try {
-      await startNewGame(names, withBot);
-      Storage.set("setup", { names: names.join(", "), bot: withBot, hotseat: hotseat });
-      openInvitesAfterDeal();
+      await startNewGame(names, withBot, function () {
+        Storage.set("setup", { names: names.join(", "), bot: withBot, hotseat: hotseat });
+        openInvitesAfterDeal();
+      });
     } catch (err) {
-      setSetupError(translateError(err.detail));
+      if (err.status === 0 || err.status >= 500) toast(translateError(err.detail), err.retry);
+      else setSetupError(translateError(err.detail));
     }
   }
 
@@ -620,10 +676,9 @@
       .map(function (p) { return p.name; });
     const withBot = game.players.some(function (p) { return p.bot; });
     try {
-      await startNewGame(names, withBot); // mySeat + hotseat stay the same
-      openInvitesAfterDeal();
+      await startNewGame(names, withBot, openInvitesAfterDeal); // mySeat + hotseat stay the same
     } catch (err) {
-      toast(translateError(err.detail));
+      toast(translateError(err.detail), err.retry);
     } finally {
       busy = false;
     }

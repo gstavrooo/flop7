@@ -135,6 +135,22 @@ class Runner:
         finally:
             context.close()
 
+    def clean(self, game_id: str) -> dict:
+        """Strip the official opening deal so a scenario controls every card."""
+        state = self.load(game_id)
+        state["pending"] = []
+        state.pop("deal_index", None)
+        for player in state["players"]:
+            player.update(
+                numbers=[],
+                mods=[],
+                second=False,
+                status="active",
+                round_score=0,
+                round_flop7=False,
+            )
+        return state
+
     @staticmethod
     def ready(page: Page) -> None:
         """Wait until the app has booted and rendered (not just static HTML)."""
@@ -158,7 +174,7 @@ class Runner:
 
 def test_hot_seat_hit_stay_and_target(r: Runner) -> None:
     view = r.create(("Ann", "Bob"))
-    state = r.load(view["id"])
+    state = r.clean(view["id"])
     state["deck"] = [7]  # a single, known number card
     r.store(view["id"], state)
     with r.page() as page:
@@ -173,7 +189,7 @@ def test_hot_seat_hit_stay_and_target(r: Runner) -> None:
 
     # A pending freeze is a human decision for the drawer.
     pending_view = r.create(("Ann", "Bob"))
-    state = r.load(pending_view["id"])
+    state = r.clean(pending_view["id"])
     state["pending"] = [{"kind": "freeze", "by": 0, "target": None, "source": "hit"}]
     state["discard"].append("freeze")
     r.store(pending_view["id"], state)
@@ -181,13 +197,13 @@ def test_hot_seat_hit_stay_and_target(r: Runner) -> None:
         r.join(page, pending_view, 0)
         page.wait_for_selector('[data-action="target"]')
         assert "freeze" in page.locator("#dock-prompt").inner_text().lower()
-        page.locator('[data-action="target"]').first.click()
+        page.locator('[data-action="target"]').nth(1).click()  # seat 1 (self is now a valid target)
         page.wait_for_selector(".player-card:nth-child(2) .status-badge.status-stayed")
 
 
 def test_space_next_round_also_with_focused_summary(r: Runner) -> None:
     view = r.create(("Ann", "Bob"))
-    state = r.load(view["id"])
+    state = r.clean(view["id"])
     state["round_over"] = True
     state["last_round"] = LAST_ROUND
     r.store(view["id"], state)
@@ -206,7 +222,7 @@ def test_space_next_round_also_with_focused_summary(r: Runner) -> None:
 def test_winner_banner_scales_with_margin(r: Runner) -> None:
     for gap, scale in ((5, "scale-1"), (20, "scale-2"), (40, "scale-3")):
         view = r.create(("Ann", "Bob"))
-        state = r.load(view["id"])
+        state = r.clean(view["id"])
         state["winner"] = 0
         state["players"][0]["total"] = 200 + gap
         state["players"][1]["total"] = 200
@@ -221,7 +237,7 @@ def test_winner_banner_scales_with_margin(r: Runner) -> None:
 
 def test_rematch_keeps_names_bot_and_seat(r: Runner) -> None:
     view = r.create(("Ann", "Bob"), bot=True)
-    state = r.load(view["id"])
+    state = r.clean(view["id"])
     state["bot_due_at"] = time.time() + 1000
     state["winner"] = 0
     state["players"][0]["total"] = 210
@@ -255,7 +271,7 @@ def test_rematch_keeps_names_bot_and_seat(r: Runner) -> None:
 
 def test_colour_coding_signals_status(r: Runner) -> None:
     view = r.create(("Ann", "Bob"))
-    state = r.load(view["id"])
+    state = r.clean(view["id"])
     state["players"][0]["status"] = "bust"
     state["players"][0]["round_score"] = 0
     state["players"][1]["status"] = "stayed"
@@ -278,7 +294,7 @@ def test_colour_coding_signals_status(r: Runner) -> None:
 
 def test_deck_counter_updates(r: Runner) -> None:
     view = r.create(("Ann", "Bob"))
-    state = r.load(view["id"])
+    state = r.clean(view["id"])
     state["deck"] = [5, 6]
     r.store(view["id"], state)
     with r.page() as page:
@@ -291,11 +307,12 @@ def test_deck_counter_updates(r: Runner) -> None:
 
 def test_tab_title_signals_your_turn(r: Runner) -> None:
     view = r.create(("Ann", "Bob"))
+    r.store(view["id"], r.clean(view["id"]))  # deterministic: no deal-time pending
     with r.page() as page:
         r.join(page, view, 0)
         page.wait_for_selector('[data-action="hit"]')
         assert page.title() == "▶ Flop7"
-        state = r.load(view["id"])
+        state = r.clean(view["id"])
         state["turn"] = 1  # only seat 0 has a token on this device
         r.store(view["id"], state)
         page.wait_for_function("() => document.title === 'Flop7'")
@@ -305,7 +322,7 @@ def test_solo_bot_thinking_and_explicit_next(r: Runner) -> None:
     view = r.create(("Human",), bot=True)
     with r.page() as page:
         r.join(page, view, 0)
-        state = r.load(view["id"])
+        state = r.clean(view["id"])
         state["turn"] = 1
         state["bot_due_at"] = time.time() + 1000  # hold the bot in "thinking"
         r.store(view["id"], state)
@@ -315,7 +332,7 @@ def test_solo_bot_thinking_and_explicit_next(r: Runner) -> None:
 
         # Make the bot due and reload: the server commits exactly one decision.
         before = r.get(view["id"])["version"]
-        state = r.load(view["id"])
+        state = r.clean(view["id"])
         state["bot_due_at"] = time.time() - 1
         r.store(view["id"], state)
         page.reload()
@@ -325,7 +342,7 @@ def test_solo_bot_thinking_and_explicit_next(r: Runner) -> None:
         assert r.get(view["id"])["version"] > before, "bot did not commit a decision"
 
         # Round break keeps an explicit Next round button (no auto-advance).
-        state = r.load(view["id"])
+        state = r.clean(view["id"])
         state["round_over"] = True
         state["last_round"] = LAST_ROUND
         r.store(view["id"], state)
@@ -368,7 +385,7 @@ def test_participant_preview_tracks_names_bot_and_language(r: Runner) -> None:
 
 def test_card_explanation_and_progress(r: Runner) -> None:
     view = r.create(("Ann", "Bob"))
-    state = r.load(view["id"])
+    state = r.clean(view["id"])
     state["deck"] = [5]
     r.store(view["id"], state)
     with r.page() as page:
@@ -411,7 +428,7 @@ def test_language_theme_and_rules_round_trip(r: Runner) -> None:
 
 def test_dark_mode_neutral_history(r: Runner) -> None:
     view = r.create(("Ann", "Bob"))
-    state = r.load(view["id"])
+    state = r.clean(view["id"])
     state["round_over"] = True
     state["last_round"] = LAST_ROUND
     r.store(view["id"], state)
@@ -475,17 +492,18 @@ def test_waiting_bar_constant_height(r: Runner) -> None:
         heights = [page.locator(".waiting-bar").bounding_box()["height"]]
 
         view = r.create(("Ann", "Bob"))
+        r.store(view["id"], r.clean(view["id"]))
         r.join(page, view, 0)
         page.wait_for_selector('[data-action="hit"]')
         heights.append(page.locator(".waiting-bar").bounding_box()["height"])
 
-        state = r.load(view["id"])
+        state = r.clean(view["id"])
         state["turn"] = 1
         r.store(view["id"], state)
         page.wait_for_function("() => !document.querySelector('#dock .btn-hit')")
         heights.append(page.locator(".waiting-bar").bounding_box()["height"])
 
-        state = r.load(view["id"])
+        state = r.clean(view["id"])
         state["round_over"] = True
         state["last_round"] = LAST_ROUND
         r.store(view["id"], state)
@@ -548,7 +566,7 @@ def test_malformed_invites_are_ignored(r: Runner) -> None:
 
 def test_legacy_texts_keep_rendering(r: Runner) -> None:
     view = r.create(("Ann", "Bob"))
-    state = r.load(view["id"])
+    state = r.clean(view["id"])
     state["events"] = [
         {"id": 1, "type": "draws", "seat": 0, "card": 5, "text": "legacy draw text"},
         {"id": 2, "type": "old-style-log", "text": "older plain-text history entry"},
@@ -584,7 +602,7 @@ def test_stale_move_toast_and_reload(r: Runner) -> None:
         page.route("**/events*", lambda route: route.abort())  # isolate from SSE catch-up
         r.join(page, view, 0)
         page.wait_for_selector('[data-action="hit"]')
-        state = r.load(view["id"])
+        state = r.clean(view["id"])
         state["deck"] = [3, 4]  # another device writes first: version +1
         r.store(view["id"], state)
         page.locator('[data-action="hit"]').click()
@@ -629,7 +647,7 @@ def test_invite_links_copy_qr_and_share(r: Runner) -> None:
 def test_keyboard_shortcuts_and_guards(r: Runner) -> None:
     """AC-25: h/s/target keys work; inputs and open dialogs swallow shortcuts."""
     view = r.create(("Ann", "Bob"))
-    state = r.load(view["id"])
+    state = r.clean(view["id"])
     state["deck"] = [5, 6, 7]
     r.store(view["id"], state)
     with r.page() as page:
@@ -661,13 +679,13 @@ def test_keyboard_shortcuts_and_guards(r: Runner) -> None:
         page.wait_for_selector(".player-card .status-badge.status-stayed")
 
         pending = r.create(("Ann", "Bob"))
-        pstate = r.load(pending["id"])
+        pstate = r.clean(pending["id"])
         pstate["pending"] = [{"kind": "freeze", "by": 0, "target": None, "source": "hit"}]
         pstate["discard"].append("freeze")
         r.store(pending["id"], pstate)
         r.join(page, pending, 0)
         page.wait_for_selector('[data-action="target"]')
-        page.keyboard.press("1")
+        page.keyboard.press("2")  # targets[1] = seat 1; self is targets[0] now
         page.wait_for_selector(".player-card:nth-child(2) .status-badge.status-stayed")
 
 

@@ -17,14 +17,20 @@ never grants control. No accounts, profiles, payments or chat.
 - **Deck:** 94 cards — 79 numbered (`0`×1, `1`×1, `2`×2 … `12`×12), six Score Modifiers
   (`+2` … `+10`, `x2`) and nine Action cards (Freeze, Flip Three, Second Chance ×3). The deck is
   shuffled once; the discard pile is reshuffled when it empties. Empty deck + discard = illegal move.
-- **Turn:** hit as long as you like, then stay. Drawing a number you already hold busts you (0 for
-  the round) unless a one-shot Second Chance absorbs it. `x2` doubles the sum of numbers, then
-  `+N` modifiers are added. Seven different numbers in hand = **Flip 7** (+15, ends the round for all).
-- **Actions:** Freeze banks a chosen target; Flip Three lets a target draw up to three cards (action
-  cards are queued for them afterwards); Second Chance protects once and is passed on if already held.
+- **Turn:** every round starts with one face-up card dealt to each player (action cards in the deal
+  resolve immediately). Then hit as long as you like, then stay. Drawing a number you already hold
+  busts you (0 for the round) unless a one-shot Second Chance absorbs it — and using it **ends your
+  turn** while keeping you in the round. `x2` doubles the sum of numbers, then `+N` modifiers are
+  added. Seven different numbers in hand = **Flip 7** (+15, ends the round for all).
+- **Actions:** any active player may be targeted, **including yourself**. Freeze banks the target;
+  Flip Three lets a target draw up to three cards (action cards are queued for them afterwards);
+  Second Chance protects once and is passed on if already held.
   Actions with zero or one valid target resolve automatically; the rest wait in a pending queue.
 - **Round and win:** after the round break any token holder explicitly starts the next round; the
   starting seat rotates. Scores carry over; sole leader at ≥ 200 wins — ties play on.
+
+These follow the publisher's rules (opening deal, self-targeting, Second Chance ending the turn).
+The deliberate adaptations are **2–6 seats instead of 3–18** and the optional bot for solo play.
 - **Bot:** optional, appended last, never sees the deck. It stays at ≥ 18 points or ≥ 4 numbers,
   targets the strongest opponent, and pauses a persisted 1.5 s between decisions so refreshes and
   multiple viewers cannot duplicate or skip a move. Solo human + bot works.
@@ -95,9 +101,9 @@ Run every check locally:
 ```sh
 .venv/bin/ruff check .
 .venv/bin/ruff format --check .
-.venv/bin/python -m pytest -q                        # 82 tests
+.venv/bin/python -m pytest -q                        # 86 tests
 .venv/bin/python -m playwright install chromium      # once
-.venv/bin/python tests/browser_checks.py             # 25 named scenarios, ~25 s
+.venv/bin/python tests/browser_checks.py             # 26 named scenarios, ~25 s
 ```
 
 After editing a `*.in` file, recompile both lockfiles (runtime first — the dev file includes it):

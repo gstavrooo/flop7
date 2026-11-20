@@ -91,8 +91,10 @@ def test_create_returns_201_public_view_and_one_time_tokens(env):
     assert view["version"] == 0
     assert view["round"] == 1
     assert view["winner"] is None and view["round_over"] is False
-    assert view["deck_count"] == 94 and "deck" not in view
-    assert view["scores"] == [0, 0] and view["targets"] == [] and view["events"] == []
+    # Official opening deal consumed one card per player (action cards may draw more).
+    assert view["deck_count"] <= 92 and "deck" not in view
+    assert len(view["scores"]) == 2 and view["targets"] == []
+    assert all("token" not in str(event) for event in view["events"])  # deal events, no secrets
     assert [seat["seat"] for seat in view["seats"]] == [0, 1]
     assert all(len(seat["token"]) >= 20 for seat in view["seats"])
 
@@ -283,6 +285,7 @@ def test_illegal_moves_use_stable_409_messages(env):
 
     state = json.loads(row_for(url, game_id).state)
     state["round_over"] = True
+    state["deck"] = [5, 6, 7]  # the next round deals starting cards again
     set_state(url, game_id, state)
     assert post("hit", 0, 0).json()["detail"] == rules.START_NEXT_ROUND
     assert post("next", 1, 0).status_code == 200

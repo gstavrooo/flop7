@@ -110,7 +110,10 @@ def test_second_consumed_exactly_once_then_discarded():
     assert protected["players"][0]["status"] == "active"
     assert 5 in protected["discard"]
     assert sum(e["type"] == "second" and e.get("used") for e in protected["events"]) == 1
-    busted = engine.hit(protected, 0, RNG)
+    # Official FAQ case 3: the turn passes, but the player stays in the round.
+    assert protected["turn"] == 1
+    back = engine.stay(protected, 1)
+    busted = engine.hit(back, 0, RNG)
     assert busted["players"][0]["status"] == "bust"
 
 
@@ -226,7 +229,8 @@ def test_freeze_opponent_via_target():
 
 def test_flip3_on_opponent_busts_midway():
     state = make_state(deck=["flip3", 5, 5])
-    new = engine.hit(state, 0, RNG)
+    pending = engine.hit(state, 0, RNG)
+    new = engine.target(pending, 0, 1, RNG)
     assert new["players"][1]["status"] == "bust"
     assert new["players"][1]["numbers"] == [5]
     assert any(event["type"] == "flip3" for event in new["events"])
@@ -234,7 +238,8 @@ def test_flip3_on_opponent_busts_midway():
 
 def test_flip3_action_cards_queued_and_played_by_target():
     state = make_state(deck=["flip3", "second", 3, 9])
-    new = engine.hit(state, 0, RNG)
+    pending = engine.hit(state, 0, RNG)
+    new = engine.target(pending, 0, 1, RNG)
     assert new["players"][1]["numbers"] == [3, 9]
     assert new["players"][1]["second"] is True
     assert new["pending"] == []
@@ -242,7 +247,8 @@ def test_flip3_action_cards_queued_and_played_by_target():
 
 def test_flip3_queued_action_lost_on_bust():
     state = make_state(deck=["flip3", "second", 3, 3, 11])
-    new = engine.hit(state, 0, RNG)
+    pending = engine.hit(state, 0, RNG)
+    new = engine.target(pending, 0, 1, RNG)
     assert new["players"][1]["status"] == "bust"
     assert new["players"][1]["second"] is False
 
@@ -250,19 +256,20 @@ def test_flip3_queued_action_lost_on_bust():
 def test_flip3_queued_action_lost_on_round_end():
     state = make_state(deck=["flip3", "second", 7])
     state["players"][1]["numbers"] = [0, 1, 2, 3, 4, 5]
-    new = engine.hit(state, 0, RNG)
+    pending = engine.hit(state, 0, RNG)
+    new = engine.target(pending, 0, 1, RNG)
     assert new["players"][1]["round_flop7"] is True
     assert new["round_over"] is True
     assert new["players"][1]["second"] is False
     assert new["pending"] == []
 
 
-def test_flip3_without_a_target_is_discarded():
-    state = make_state(deck=["flip3"])
+def test_flip3_self_when_only_active_player():
+    state = make_state(deck=["flip3", 2, 4, 6])
     state["players"][1]["status"] = "stayed"
     new = engine.hit(state, 0, RNG)
-    assert new["pending"] == []
-    assert not any(event["type"] == "flip3" for event in new["events"])
+    assert new["players"][0]["numbers"] == [2, 4, 6]
+    assert any(e["type"] == "flip3" and e.get("target") == 0 for e in new["events"])
 
 
 def test_hit_and_stay_are_blocked_while_a_decision_is_pending():
@@ -356,7 +363,7 @@ def test_target_errors():
     state = make_state(names=("A", "B", "C"), deck=["freeze"])
     pending = engine.hit(state, 0, RNG)
     assert_error(lambda: engine.target(pending, 1, 2, RNG), "not your decision")
-    assert_error(lambda: engine.target(pending, 0, 0, RNG), "invalid target")
+    assert_error(lambda: engine.target(pending, 0, 99, RNG), "invalid target")
 
 
 def test_new_game_player_count_validation():
@@ -449,3 +456,45 @@ def test_functions_do_not_mutate_their_input():
     before = copy.deepcopy(state)
     engine.hit(state, 0, RNG)
     assert state == before
+
+
+# --- Official-rule alignment (opening deal, Second Chance, self-targeting) -----
+
+
+def test_opening_deal_gives_every_active_player_one_card():
+    state = make_state(names=("A", "B"), deck=[3, 7])
+    dealt = engine.start_round(state, RNG)
+    assert [p["numbers"] for p in dealt["players"]] == [[3], [7]]
+    assert dealt["deck"] == [] and "deal_index" not in dealt
+
+
+def test_opening_deal_pauses_for_a_choice_and_resumes_on_target():
+    state = make_state(names=("A", "B", "C"), deck=["freeze", 4, 5, 6])
+    paused = engine.start_round(state, RNG)
+    assert paused["pending"][0]["kind"] == "freeze" and paused["deal_index"] == 1
+    resumed = engine.target(paused, 0, 1, RNG)
+    assert resumed["players"][1]["status"] == "stayed"  # frozen before their card
+    assert resumed["players"][2]["numbers"] == [4]  # the remaining player still gets one
+    assert "deal_index" not in resumed and len(resumed["deck"]) == 2
+
+
+def test_self_targeting_is_allowed_with_other_active_players():
+    freeze = engine.hit(make_state(deck=["freeze"]), 0, RNG)
+    assert 0 in engine.public_view(freeze)["targets"]
+    frozen = engine.target(freeze, 0, 0, RNG)
+    assert frozen["players"][0]["status"] == "stayed"
+
+    flip = engine.hit(make_state(deck=["flip3", 2, 4, 8]), 0, RNG)
+    flipped = engine.target(flip, 0, 0, RNG)
+    assert flipped["players"][0]["numbers"] == [2, 4, 8]
+    assert any(e["type"] == "flip3" and e.get("target") == 0 for e in flipped["events"])
+
+
+def test_second_chance_keeps_flip3_going():
+    state = make_state(deck=["flip3", 5, 5, 9])
+    state["players"][1]["second"] = True
+    pending = engine.hit(state, 0, RNG)
+    new = engine.target(pending, 0, 1, RNG)
+    assert new["players"][1]["numbers"] == [5, 9]  # flip continues after the save
+    assert new["players"][1]["second"] is False
+    assert new["turn"] == 0  # Flip Three never passes the turn

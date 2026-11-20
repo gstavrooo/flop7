@@ -187,32 +187,49 @@ def _advance_turn(state: State, from_seat: int) -> None:
     _finish_round(state)
 
 
-def _apply_number(state: State, seat: int, card: Card) -> None:
+def _apply_number(state: State, seat: int, card: Card) -> bool:
+    """Apply a number card; return True when a Second Chance ended the turn.
+
+    Official FAQ case 3: a neutralised duplicate ends your turn (you stay in the
+    round). The caller decides whether that ends the current action — a Flip Three
+    must still finish its three cards.
+    """
     player = state["players"][seat]
     if card in player["numbers"]:
         if player["second"]:
             player["second"] = False
             state["discard"].append(card)
             _emit(state, "second", seat=seat, used=True)
-        else:
-            player["status"] = "bust"
-            player["round_score"] = 0
-            state["discard"].append(card)
-            _emit(state, "bust", seat=seat, card=card)
-        return
+            return True
+        player["status"] = "bust"
+        player["round_score"] = 0
+        state["discard"].append(card)
+        _emit(state, "bust", seat=seat, card=card)
+        return False
     player["numbers"].append(card)
     if len(player["numbers"]) >= FLOP7_NUMBERS and not player["round_flop7"]:
         player["round_flop7"] = True
         _bank(state, seat)
         _emit(state, "flop7", seat=seat, points=player["round_score"])
         _finish_round(state)
+    return False
+
+
+def _apply_card(state: State, seat: int, card: Card, source: str) -> bool:
+    """Apply one drawn card (hit, deal or Flip Three); return 'Second Chance used'."""
+    if _is_number(card):
+        return _apply_number(state, seat, card)
+    if card in MODIFIERS:
+        state["players"][seat]["mods"].append(card)
+    else:
+        _create_pending(state, seat, card, source)
+    return False
 
 
 def _valid_targets(state: State, pending: dict[str, Any]) -> list[int]:
-    by = pending["by"]
-    targets = [
-        seat for seat, player in enumerate(state["players"]) if seat != by and player["status"] == "active"
-    ]
+    # Official rules: an Action card may target ANY active player, including the
+    # drawer. A spare Second Chance is the exception: you can never hold two.
+    targets = [seat for seat, player in enumerate(state["players"]) if player["status"] == "active"]
     if pending["kind"] == "give":
         targets = [seat for seat in targets if not state["players"][seat]["second"]]
     return targets
@@ -247,10 +264,10 @@ def _apply_pending(state: State, pending: dict[str, Any], rng: Any) -> None:
                 break
             card = _draw_card(state, rng)
             _emit(state, "draws", seat=target, card=card)
-            if _is_number(card):
-                _apply_number(state, target, card)
-            elif card in MODIFIERS:
-                player["mods"].append(card)
+            if _is_number(card) or card in MODIFIERS:
+                # A Second Chance used during Flip Three does not stop the
+                # remaining cards: it is not the target's own "hit or stay".
+                _apply_card(state, target, card, "flip3")
             else:
                 deferred.append(card)
         if state["players"][target]["status"] == "active" and not state["round_over"]:
@@ -279,9 +296,8 @@ def resolve_pending(state: State, rng: Any, *, max_steps: int = MAX_AUTOMATIC) -
             continue
         targets = _valid_targets(new, pending)
         if not targets:
+            # No active target at all (or nobody without a Second Chance): discard.
             new["pending"].pop(0)
-            if pending["kind"] == "freeze":
-                _apply_pending(new, {**pending, "target": pending["by"]}, rng)
             continue
         if len(targets) == 1:
             new["pending"].pop(0)
@@ -310,13 +326,12 @@ def hit(state: State, seat: int, rng: Any) -> State:
         raise IllegalMove(CHOOSE_TARGET)
     card = _draw_card(new, rng)
     _emit(new, "draws", seat=seat, card=card)
-    if _is_number(card):
-        _apply_number(new, seat, card)
-    elif card in MODIFIERS:
-        new["players"][seat]["mods"].append(card)
-    else:
-        _create_pending(new, seat, card, "hit")
-    if new["players"][seat]["status"] != "active" and seat == new["turn"] and not new["round_over"]:
+    second_used = _apply_card(new, seat, card, "hit")
+    if (
+        (second_used or new["players"][seat]["status"] != "active")
+        and seat == new["turn"]
+        and not new["round_over"]
+    ):
         _advance_turn(new, seat)
     new = resolve_pending(new, rng)
     _ensure_round_state(new)
@@ -351,7 +366,10 @@ def target(state: State, seat: int, target_seat: int, rng: Any) -> State:
         raise IllegalMove(INVALID_TARGET)
     new["pending"].pop(0)
     _apply_pending(new, {**pending, "target": target_seat}, rng)
-    return resolve_pending(new, rng)
+    new = resolve_pending(new, rng)
+    if "deal_index" in new and not new["pending"]:
+        new = start_round(new, rng, resume=True)  # resume the paused opening deal
+    return new
 
 
 def next_round(state: State) -> State:
@@ -378,6 +396,38 @@ def next_round(state: State) -> State:
     return new
 
 
+def start_round(state: State, rng: Any, *, resume: bool = False) -> State:
+    """Deal one starting card to every active player (official opening deal).
+
+    An Action card pauses the deal until it is resolved. If a human must choose a
+    target, ``deal_index`` records where to continue when ``target`` is called.
+    """
+    new = copy.deepcopy(state)
+    count = len(new["players"])
+    order = [(new["turn"] + step) % count for step in range(count)]
+    start = new.get("deal_index", 0) if resume else 0
+    for index in range(start, count):
+        seat = order[index]
+        if new["round_over"] or new["winner"] is not None:
+            new.pop("deal_index", None)
+            return new
+        if new["players"][seat]["status"] != "active":
+            continue
+        if new["pending"]:
+            new["deal_index"] = index
+            return new
+        card = _draw_card(new, rng)
+        _emit(new, "draws", seat=seat, card=card)
+        _apply_card(new, seat, card, "deal")
+        new = resolve_pending(new, rng)
+    if new["pending"]:
+        new["deal_index"] = count  # only the pending choice remains
+        return new
+    new.pop("deal_index", None)
+    _ensure_round_state(new)
+    return new
+
+
 def bot_seat(state: State) -> int | None:
     return next((seat for seat, player in enumerate(state["players"]) if player["bot"]), None)
 
@@ -392,6 +442,8 @@ def bot_action(state: State) -> dict[str, Any]:
         if pending["by"] != seat:
             return {"action": "wait"}
         targets = _valid_targets(state, pending)
+        if seat in targets and len(targets) > 1:
+            targets = [candidate for candidate in targets if candidate != seat]
         if not targets:
             return {"action": "wait"}
         strongest = max(targets, key=lambda target: (_current_score(state, target), -target))
@@ -423,6 +475,7 @@ def public_view(state: State) -> State:
     """Full state minus the hidden deck, with derived scores and targets."""
     view = copy.deepcopy(state)
     view.pop("deck", None)
+    view.pop("deal_index", None)  # internal deal-resume cursor
     view["deck_count"] = len(state["deck"])
     for seat, player in enumerate(view["players"]):
         player["score"] = _current_score(state, seat)

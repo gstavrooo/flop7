@@ -210,7 +210,7 @@ def create_app(
                 elif action == "stay":
                     new_state = rules.stay(state, body.seat)
                 elif action == "next":
-                    new_state = rules.next_round(state)
+                    new_state = rules.start_round(rules.next_round(state), bot_rng)
                 else:
                     new_state = rules.target(state, body.seat, target, bot_rng)
             except rules.IllegalMove as exc:
@@ -229,7 +229,7 @@ def create_app(
         if any(not 1 <= len(name) <= 20 for name in names):
             raise HTTPException(status_code=422, detail=BAD_NAMES)
 
-        state = rules.new_game(names, bot=body.bot, rng=bot_rng)
+        state = rules.start_round(rules.new_game(names, bot=body.bot, rng=bot_rng), bot_rng)
         if body.bot:
             state["bot_due_at"] = time.time() + BOT_DELAY_SECONDS
         game_id = new_game_id()

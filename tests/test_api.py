@@ -220,6 +220,7 @@ def test_moves_are_persisted(env):
     game_id = view["id"]
     set_state(url, game_id, with_deck(json.loads(row_for(url, game_id).state), [5, 4, 3]))
 
+    # One card per turn: seat 0 draws, then seat 1, then seat 2 decides the pending.
     assert (
         client.post(
             f"/api/games/{game_id}/hit", json={"seat": 0, "version": 0}, headers=auth(view)
@@ -228,17 +229,17 @@ def test_moves_are_persisted(env):
     )
     assert (
         client.post(
-            f"/api/games/{game_id}/stay", json={"seat": 0, "version": 1}, headers=auth(view)
+            f"/api/games/{game_id}/hit", json={"seat": 1, "version": 1}, headers=auth(view, 1)
         ).status_code
         == 200
     )
     state = json.loads(row_for(url, game_id).state)
-    state["pending"] = [{"kind": "freeze", "by": 1, "target": None, "source": "hit"}]
+    state["pending"] = [{"kind": "freeze", "by": 2, "target": None, "source": "hit"}]
     set_state(url, game_id, state)
     response = client.post(
         f"/api/games/{game_id}/target",
-        json={"seat": 1, "version": 2, "target": 2},
-        headers=auth(view, 1),
+        json={"seat": 2, "version": 2, "target": 0},
+        headers=auth(view, 2),
     )
     assert response.status_code == 200, response.text
 
@@ -252,7 +253,7 @@ def test_moves_are_persisted(env):
             ).all()
     finally:
         engine.dispose()
-    assert [tuple(entry) for entry in audit] == [(0, "hit", None), (0, "stay", None), (1, "target", 2)]
+    assert [tuple(entry) for entry in audit] == [(0, "hit", None), (1, "hit", None), (2, "target", 0)]
 
 
 def test_illegal_moves_use_stable_409_messages(env):
@@ -336,6 +337,35 @@ def test_solo_bot_plays_server_side(env):
     version = row_for(url, game_id).version
     client.get(f"/api/games/{game_id}")
     assert row_for(url, game_id).version == version  # not due yet
+
+
+def test_human_hit_then_bot_hit_alternate_turns(env):
+    """A human card is followed by exactly one bot card, then the turn returns."""
+    client, url = env
+    view = create(client, ("Human",), bot=True)
+    game_id = view["id"]
+    state = json.loads(row_for(url, game_id).state)
+    state["bot_due_at"] = time.time() - 1  # make the bot due on the next poll
+    set_state(url, game_id, with_deck(state, [5, 6]))
+
+    first = client.post(f"/api/games/{game_id}/hit", json={"seat": 0, "version": 0}, headers=auth(view))
+    assert first.status_code == 200
+    assert first.json()["turn"] == 1  # the bot is up now
+
+    before = row_for(url, game_id).version
+    polled = client.get(f"/api/games/{game_id}")
+    assert polled.json()["version"] == before + 1
+    assert polled.json()["turn"] == 0  # the bot's single card passed it back
+
+    engine = create_engine(url)
+    try:
+        with engine.connect() as connection:
+            audit = connection.execute(
+                select(moves.c.seat, moves.c.action).where(moves.c.game_id == game_id)
+            ).all()
+    finally:
+        engine.dispose()
+    assert [tuple(entry) for entry in audit] == [(0, "hit"), (1, "hit")]
 
 
 def test_concurrent_bot_viewers_commit_exactly_one_decision(env):

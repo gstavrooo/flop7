@@ -89,15 +89,32 @@ def test_no_cards_left():
 
 
 def test_duplicate_number_busts_and_passes_turn():
-    state = make_state(deck=[5, 5])
+    state = make_state(deck=[5, 5, 5])
     first = engine.hit(state, 0, RNG)
     assert first["players"][0]["numbers"] == [5]
-    second = engine.hit(first, 0, RNG)
-    assert second["players"][0]["status"] == "bust"
-    assert second["players"][0]["round_score"] == 0
-    assert 5 in second["discard"]
-    assert second["turn"] == 1
-    assert any(event["type"] == "bust" for event in second["events"])
+    assert first["turn"] == 1  # one card per turn: the draw already passes the turn
+    second = engine.hit(first, 1, RNG)
+    assert second["players"][1]["numbers"] == [5]
+    assert second["turn"] == 0
+    busted = engine.hit(second, 0, RNG)
+    assert busted["players"][0]["status"] == "bust"
+    assert busted["players"][0]["round_score"] == 0
+    assert 5 in busted["discard"]
+    assert busted["turn"] == 1
+    assert any(event["type"] == "bust" for event in busted["events"])
+
+
+def test_hit_alternates_players_card_by_card():
+    """A hit is one card; the turn passes to the next active player (spec 2.2)."""
+    state = make_state(names=("A", "B", "C"), deck=[1, 2, 3, 4])
+    one = engine.hit(state, 0, RNG)
+    assert one["turn"] == 1
+    two = engine.hit(one, 1, RNG)
+    assert two["turn"] == 2
+    three = engine.hit(two, 2, RNG)
+    assert three["turn"] == 0
+    stayed = engine.stay(three, 0)
+    assert stayed["turn"] == 1
 
 
 def test_second_consumed_exactly_once_then_discarded():
@@ -105,15 +122,16 @@ def test_second_consumed_exactly_once_then_discarded():
     state["players"][0]["second"] = True
     held = engine.hit(state, 0, RNG)
     assert held["players"][0]["numbers"] == [5]
-    protected = engine.hit(held, 0, RNG)
+    assert held["turn"] == 1
+    passed = engine.stay(held, 1)  # seat 1 sits out; turn returns to seat 0
+    protected = engine.hit(passed, 0, RNG)
     assert protected["players"][0]["second"] is False
     assert protected["players"][0]["status"] == "active"
     assert 5 in protected["discard"]
     assert sum(e["type"] == "second" and e.get("used") for e in protected["events"]) == 1
-    # Official FAQ case 3: the turn passes, but the player stays in the round.
-    assert protected["turn"] == 1
-    back = engine.stay(protected, 1)
-    busted = engine.hit(back, 0, RNG)
+    # Official FAQ case 3: a saved duplicate still ends that card's turn.
+    assert protected["turn"] == 0  # only seat 0 remains active
+    busted = engine.hit(protected, 0, RNG)
     assert busted["players"][0]["status"] == "bust"
 
 
@@ -150,8 +168,8 @@ def test_flop7_bonus_ends_round_for_everyone():
 
 def test_stay_banks_and_advances_the_turn():
     state = make_state(deck=[4])
-    first = engine.hit(state, 0, RNG)
-    second = engine.stay(first, 0)
+    state["players"][0]["numbers"] = [4]  # a hit already passed the turn on
+    second = engine.stay(state, 0)
     assert second["players"][0]["status"] == "stayed"
     assert second["players"][0]["round_score"] == 4
     assert second["turn"] == 1
@@ -160,10 +178,10 @@ def test_stay_banks_and_advances_the_turn():
 
 def test_round_summary_survives_hand_reset_and_start_seat_rotates():
     state = make_state(names=("A", "B", "C"), deck=[4])
-    first = engine.hit(state, 0, RNG)
-    first = engine.stay(first, 0)
-    first = engine.stay(first, 1)
-    first = engine.stay(first, 2)
+    first = engine.hit(state, 0, RNG)  # turn 0 -> 1
+    first = engine.stay(first, 1)  # -> 2
+    first = engine.stay(first, 2)  # -> 0
+    first = engine.stay(first, 0)  # last active seat banks, round ends
     assert first["round_over"] is True
     assert len(first["last_round"]) == 3
     summary = copy.deepcopy(first["last_round"])
@@ -180,9 +198,9 @@ def test_round_summary_survives_hand_reset_and_start_seat_rotates():
 def test_win_at_200_sole_leader():
     state = make_state(deck=[10])
     state["players"][0]["total"] = 195
-    first = engine.hit(state, 0, RNG)
-    first = engine.stay(first, 0)
-    done = engine.stay(first, 1)
+    first = engine.hit(state, 0, RNG)  # turn 0 -> 1
+    first = engine.stay(first, 1)  # -> 0
+    done = engine.stay(first, 0)  # banks 10, reaches 205
     assert done["winner"] == 0
     assert done["players"][0]["total"] == 205
     assert any(event["type"] == "win" for event in done["events"])
@@ -192,10 +210,10 @@ def test_tie_at_200_plays_another_round():
     state = make_state(deck=[5, 5])
     state["players"][0]["total"] = 195
     state["players"][1]["total"] = 195
-    first = engine.hit(state, 0, RNG)
-    first = engine.stay(first, 0)
-    first = engine.hit(first, 1, RNG)
-    done = engine.stay(first, 1)
+    first = engine.hit(state, 0, RNG)  # turn 0 -> 1
+    first = engine.hit(first, 1, RNG)  # -> 0
+    first = engine.stay(first, 0)  # 195 + 5 = 200
+    done = engine.stay(first, 1)  # 195 + 5 = 200: tie
     assert done["winner"] is None
     assert done["round_over"] is True
     assert any(event["type"] == "tie" for event in done["events"])
@@ -411,6 +429,34 @@ def test_bot_waits_at_round_break_and_when_game_over():
     assert engine.bot_action(state)["action"] == "wait"
 
 
+def test_bot_and_human_alternate_one_card_per_turn():
+    """The reported bug: all the human's hits, then all the bot's, must interleave."""
+    state = make_state(names=("A",), bot=True, deck=[5, 6, 7, 8, 9, 10])
+    assert state["turn"] == 0
+    actors = []
+    for _ in range(6):
+        turn = state["turn"]
+        actors.append(turn)
+        if turn == 1:
+            action = engine.bot_action(state)["action"]
+            assert action == "hit"  # below the bot's stay threshold for this deck
+            state = engine.hit(state, 1, RNG)
+        else:
+            state = engine.hit(state, 0, RNG)
+        assert state["turn"] != turn  # every single card hands over
+    assert actors == [0, 1, 0, 1, 0, 1]
+    assert state["players"][0]["numbers"] == [5, 7, 9]
+    assert state["players"][1]["numbers"] == [6, 8, 10]
+
+
+def test_pending_decision_keeps_turn_until_resolved_then_passes():
+    state = make_state(names=("A", "B", "C"), deck=["freeze", 4])
+    pending = engine.hit(state, 0, RNG)
+    assert pending["turn"] == 0  # the drawer still owns the unfinished card
+    resolved = engine.target(pending, 0, 2, RNG)
+    assert resolved["turn"] == 1  # once the choice is made, the card is done
+
+
 def test_bot_move_applies_the_decision():
     state = bot_state([1, 2, 3])
     state["deck"] = [12]
@@ -439,8 +485,8 @@ def test_public_view_hides_deck_and_derives_fields():
 def test_events_have_unique_monotonic_ids_and_are_capped_at_twelve():
     state = make_state(deck=["+2"] * 15)
     new = state
-    for _ in range(15):
-        new = engine.hit(new, 0, RNG)
+    for turn in range(15):
+        new = engine.hit(new, turn % 2, RNG)  # turns alternate card by card
     ids = [event["id"] for event in new["events"]]
     assert len(ids) == 12
     assert len(set(ids)) == 12
@@ -497,4 +543,6 @@ def test_second_chance_keeps_flip3_going():
     new = engine.target(pending, 0, 1, RNG)
     assert new["players"][1]["numbers"] == [5, 9]  # flip continues after the save
     assert new["players"][1]["second"] is False
-    assert new["turn"] == 0  # Flip Three never passes the turn
+    # The Flip Three cards belong to the drawer's single card turn: once the
+    # queued decisions are resolved, the turn passes on like any other hit.
+    assert new["turn"] == 1

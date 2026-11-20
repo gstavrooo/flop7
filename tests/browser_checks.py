@@ -184,8 +184,22 @@ def test_hot_seat_hit_stay_and_target(r: Runner) -> None:
         page.locator('[data-action="hit"]').click()
         page.wait_for_function("() => document.querySelector('#dock-deck').textContent === 'Deck: 0'")
         assert page.locator(".player-card").first.locator(".card").count() == 1
+        # One card per turn: the turn marker moves to Bob and the human waits.
+        page.wait_for_function(
+            "() => document.querySelectorAll('.player-card')[1].classList.contains('is-turn')"
+        )
+        assert page.locator('[data-action="hit"]').count() == 0
+
+    # Staying is an alternative to the single hit, on a fresh turn.
+    stay_view = r.create(("Ann", "Bob"))
+    state = r.clean(stay_view["id"])
+    state["players"][0]["numbers"] = [4]
+    r.store(stay_view["id"], state)
+    with r.page() as page:
+        r.join(page, stay_view, 0)
+        page.wait_for_selector('[data-action="stay"]')
         page.locator('[data-action="stay"]').click()
-        page.wait_for_selector(".player-card .status-badge.status-stayed")
+        page.wait_for_selector(".player-card:nth-child(1) .status-badge.status-stayed")
 
     # A pending freeze is a human decision for the drawer.
     pending_view = r.create(("Ann", "Bob"))
@@ -254,6 +268,7 @@ def test_rematch_keeps_names_bot_and_seat(r: Runner) -> None:
         assert saved and isinstance(saved["value"]["tokens"]["0"], str)
 
     # The rematch keeps exactly the same names and bot, and the seat still works.
+    r.store(new_id, r.clean(new_id))  # deterministic: no random deal-time pending
     state = r.load(new_id)
     state["bot_due_at"] = time.time() + 1000
     r.store(new_id, state)
@@ -452,6 +467,9 @@ def test_dark_mode_neutral_history(r: Runner) -> None:
 
 def test_two_devices_live_updates(r: Runner) -> None:
     view = r.create(("Ann", "Bob"))
+    state = r.clean(view["id"])
+    state["deck"] = [5, 6]  # a known number card, no random action/pending
+    r.store(view["id"], state)
     with r.page() as first, r.page(MOBILE) as second:
         r.join(first, view, 0)
         r.join(second, view, 1)
@@ -598,6 +616,7 @@ def test_connection_lost_chip_after_delay(r: Runner) -> None:
 def test_stale_move_toast_and_reload(r: Runner) -> None:
     """AC-21: a 409 shows a translated toast and reloads state, never a double draw."""
     view = r.create(("Ann", "Bob"))
+    r.store(view["id"], r.clean(view["id"]))  # deterministic: no random deal-time pending
     with r.page() as page:
         page.route("**/events*", lambda route: route.abort())  # isolate from SSE catch-up
         r.join(page, view, 0)
@@ -675,8 +694,16 @@ def test_keyboard_shortcuts_and_guards(r: Runner) -> None:
 
         page.keyboard.press("h")
         page.wait_for_function("() => document.querySelectorAll('.player-card .card').length === 1")
+        # The single card handed the turn to Bob, so "s" is not the human's to press.
+        page.wait_for_function("() => !document.querySelector('#dock .btn-hit')")
+        # Bring the turn back to seat 0 to exercise the stay shortcut.
+        state = r.clean(view["id"])
+        state["turn"] = 0
+        state["players"][0]["numbers"] = [5]
+        r.store(view["id"], state)
+        page.wait_for_selector('[data-action="stay"]')
         page.keyboard.press("s")
-        page.wait_for_selector(".player-card .status-badge.status-stayed")
+        page.wait_for_selector(".player-card:nth-child(1) .status-badge.status-stayed")
 
         pending = r.create(("Ann", "Bob"))
         pstate = r.clean(pending["id"])

@@ -16,13 +16,21 @@ printf '%s' "$body" | python3 -c 'import json,sys; assert json.load(sys.stdin).g
 curl -fsS --max-time 10 "$BASE/" | grep -q 'FLOP7' || fail "frontend page not served"
 
 # 3. Create a game; capture the one-time seat token and version.
-created=$(curl -fsS --max-time 10 -X POST "$BASE/api/games" \
-  -H 'Content-Type: application/json' \
-  -d '{"players":["Smoke A","Smoke B"]}') || fail "game creation failed"
-read -r GAME_ID TOKEN VERSION <<EOF
-$(printf '%s' "$created" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["id"], d["seats"][0]["token"], d["version"])')
+# The official opening deal can leave a pending action, which makes "stay"
+# illegal for seat 0. Retry until the new game has a clear opening turn.
+attempt=0
+while :; do
+  created=$(curl -fsS --max-time 10 -X POST "$BASE/api/games" \
+    -H 'Content-Type: application/json' \
+    -d '{"players":["Smoke A","Smoke B"]}') || fail "game creation failed"
+  read -r GAME_ID TOKEN VERSION READY <<EOF
+$(printf '%s' "$created" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["id"], d["seats"][0]["token"], d["version"], int(not d.get("pending") and d.get("turn") == 0 and d["players"][0]["status"] == "active"))')
 EOF
-[ -n "$GAME_ID" ] || fail "create response had no game id"
+  [ -n "$GAME_ID" ] || fail "create response had no game id"
+  [ "$READY" = 1 ] && break
+  attempt=$((attempt + 1))
+  [ "$attempt" -ge 10 ] && fail "no playable opening deal after $attempt games"
+done
 
 MOVE="$BASE/api/games/$GAME_ID/stay"
 BODY="{\"seat\":0,\"version\":$VERSION}"

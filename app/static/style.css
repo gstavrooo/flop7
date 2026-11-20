@@ -301,6 +301,15 @@ button { font-family: inherit; }
 .card.card-plus, .card.card-x2 { background: var(--green); color: #111; }
 .card.card-action { background: var(--violet); color: #111; }
 .second-flag { font-weight: bold; color: #111; background: var(--green); border: 2px solid #111; padding: 2px 6px; }
+.deal-hint {
+  margin: 14px 0 0;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-weight: bold;
+  color: #111;
+  background: var(--green);
+  border: 2px solid #111;
+}
 
 /* ---------- round summary + winner (6.5) ---------- */
 .round-summary {
@@ -399,6 +408,8 @@ button { font-family: inherit; }
 .dialog::backdrop { background: rgba(0, 0, 0, 0.55); }
 .dialog-title { font-size: 22px; margin: 0 0 12px; }
 .dialog-hint { color: var(--muted); margin: 0 0 14px; font-size: 13px; }
+.invite-feedback { margin: 0 0 10px; font-weight: bold; }
+.invite-feedback:empty { display: none; }
 .dialog-body { white-space: pre-line; margin: 0 0 16px; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 12px; }
 

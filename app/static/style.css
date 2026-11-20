@@ -292,6 +292,13 @@ button { font-family: inherit; }
 }
 /* Accent card faces stay light islands: black text in both themes. */
 .card.card-new { background: var(--pink); color: #111; box-shadow: 2px 2px 0 #111; }
+/* Freshly dealt cards appear one at a time in engine turn order (JS sets the delay). */
+@keyframes card-deal {
+  from { opacity: 0; transform: translateY(-16px) rotate(-8deg) scale(0.8); }
+  70% { opacity: 1; transform: translateY(2px) rotate(2deg) scale(1.05); }
+  to { opacity: 1; transform: none; }
+}
+.card.card-deal { animation: card-deal 380ms cubic-bezier(0.2, 0.8, 0.3, 1.2) both; }
 .card.card-number { background: var(--cyan); color: #111; }
 .card.card-plus, .card.card-x2 { background: var(--green); color: #111; }
 .card.card-action { background: var(--violet); color: #111; }
@@ -397,8 +404,26 @@ button { font-family: inherit; }
 .dialog-body { white-space: pre-line; margin: 0 0 16px; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 12px; }
 
+/* Wider so long invite URLs fit; each row wraps its link onto a few lines. */
+#invite-dialog { width: min(94vw, 680px); }
 .invite-list { display: grid; gap: 14px; }
 .invite-row { padding: 12px; border: var(--border-width) solid var(--border); background: var(--paper); }
+.invite-row .invite-link {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  padding: 8px;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--ink);
+  background: var(--surface);
+  border: var(--border-width) solid var(--border);
+  overflow: hidden;
+  resize: none;
+  word-break: break-all;
+  overflow-wrap: anywhere;
+}
 .invite-row-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; font-weight: bold; }
 .invite-row-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .invite-row-actions .btn { min-height: 40px; padding: 6px 12px; font-size: 13px; }
@@ -417,4 +442,8 @@ button { font-family: inherit; }
   .dock-prompt { font-size: 14px; min-height: 2.2em; }
   .dock .btn { flex: 1 1 auto; }
   .waiting-bar { margin-left: -12px; margin-right: -12px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card.card-deal { animation: none; }
 }

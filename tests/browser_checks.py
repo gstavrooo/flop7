@@ -642,9 +642,9 @@ def test_invite_links_copy_qr_and_share(r: Runner) -> None:
         assert r.get(game_id)["id"] == game_id
         rows = page.locator(".invite-row")
         assert rows.count() == 2
-        own_link = rows.nth(0).locator("input").input_value()
+        own_link = rows.nth(0).locator("textarea.invite-link").input_value()
         other = rows.nth(1)
-        link = other.locator("input").input_value()
+        link = other.locator("textarea.invite-link").input_value()
         assert "?game=" + game_id in link
         assert re.search(r"#seat=1&token=[A-Za-z0-9_-]{16,}", link)
         assert re.search(r"#seat=0&token=[A-Za-z0-9_-]{16,}", own_link)
@@ -661,6 +661,52 @@ def test_invite_links_copy_qr_and_share(r: Runner) -> None:
         page.wait_for_selector("#toast:not([hidden])")
         expected = 1 if page.evaluate("() => !!navigator.share") else 0
         assert page.locator('[data-action="share"]').count() == expected
+
+
+def test_setup_dock_prompt_is_not_duplicated(r: Runner) -> None:
+    with r.page(MOBILE) as page:
+        page.goto(r.base_url + "/")
+        r.ready(page)
+        assert page.locator("#dock-round").inner_text().strip() == ""
+        assert page.locator("#dock-prompt").is_visible()
+        assert page.locator("#dock").inner_text().count("Set up a game to begin") == 1
+
+
+def test_invite_url_box_shows_the_whole_link(r: Runner) -> None:
+    with r.page() as page:
+        page.goto(r.base_url + "/")
+        r.ready(page)
+        page.locator("#names").fill("Ann, Bob")
+        page.locator("#btn-start").click()
+        page.wait_for_selector("#invite-dialog[open]")
+        box = page.locator(".invite-row").nth(1).locator("textarea.invite-link")
+        assert box.evaluate("e => e.scrollWidth <= e.clientWidth + 1"), "URL clipped horizontally"
+        assert box.evaluate("e => e.scrollHeight <= e.clientHeight + 1"), "URL clipped vertically"
+        assert box.bounding_box()["width"] >= 300, "URL box too narrow"
+        box.focus()
+        assert box.evaluate("e => e.selectionEnd - e.selectionStart === e.value.length"), (
+            "focus did not select the whole URL"
+        )
+
+
+def test_opening_deal_reveals_cards_one_by_one(r: Runner) -> None:
+    with r.page() as page:
+        page.goto(r.base_url + "/")
+        r.ready(page)
+        page.locator("#names").fill("Ann, Bob")
+        page.locator("#btn-start").click()
+        page.wait_for_selector("#invite-dialog[open]")
+        page.locator("#invite-close").click()
+        page.wait_for_function("() => document.querySelectorAll('.player-card .card').length === 2")
+        info = page.evaluate(
+            """() => [...document.querySelectorAll('.player-card .card')].map(c => {
+                 const style = getComputedStyle(c);
+                 return { name: style.animationName, delay: style.animationDelay };
+               })"""
+        )
+        assert len(info) == 2
+        assert all(x["name"] == "card-deal" for x in info), f"deal animation missing: {info}"
+        assert info[0]["delay"] != info[1]["delay"], f"cards were not staggered: {info}"
 
 
 def test_keyboard_shortcuts_and_guards(r: Runner) -> None:

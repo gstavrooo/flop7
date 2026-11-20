@@ -6,7 +6,7 @@
   "use strict";
 
   const EN = Object.freeze({
-    "tagline": "Push your luck. Draw, bank, win.",
+    "tagline": "Push your luck. Hit, stay, win.",
     "nav.rules": "Rules",
     "nav.language": "Language",
     "nav.soundOn": "Sound on",
@@ -34,7 +34,6 @@
     "setup.errorTooMany": "At most 6 players including the bot.",
     "setup.errorName": "Each name must be 1 to 20 characters.",
 
-    "dock.setup": "Set up a game to begin",
     "dock.round": "Round {round}",
     "dock.deck": "Deck: {count}",
     "dock.yourTurn": "Your turn — hit or stay!",
@@ -137,7 +136,7 @@
   });
 
   const DE = Object.freeze({
-    "tagline": "Zieh, sichere, gewinn.",
+    "tagline": "Versuch dein Glück. Ziehen, bleiben, gewinnen.",
     "nav.rules": "Regeln",
     "nav.language": "Sprache",
     "nav.soundOn": "Ton an",
@@ -165,7 +164,6 @@
     "setup.errorTooMany": "Maximal 6 Spieler inklusive Bot.",
     "setup.errorName": "Jeder Name muss 1 bis 20 Zeichen lang sein.",
 
-    "dock.setup": "Richte ein Spiel ein, um zu beginnen",
     "dock.round": "Runde {round}",
     "dock.deck": "Stapel: {count}",
     "dock.yourTurn": "Du bist dran — ziehen oder bleiben.",

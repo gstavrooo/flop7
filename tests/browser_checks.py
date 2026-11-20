@@ -264,6 +264,7 @@ def test_rematch_keeps_names_bot_and_seat(r: Runner) -> None:
             "old => new URL(location.href).searchParams.get('game') !== old", arg=view["id"]
         )
         new_id = page.evaluate("() => new URL(location.href).searchParams.get('game')")
+        page.wait_for_selector("#invite-dialog[open]")  # new links after the deal, not a misleading toast
         saved = page.evaluate("id => JSON.parse(localStorage.getItem('flop7:v1:game:' + id))", new_id)
         assert saved and isinstance(saved["value"]["tokens"]["0"], str)
 
@@ -658,7 +659,8 @@ def test_invite_links_copy_qr_and_share(r: Runner) -> None:
         assert img.get_attribute("alt")
 
         other.locator('[data-action="copy"]').click()
-        page.wait_for_selector("#toast:not([hidden])")
+        page.wait_for_function("() => document.querySelector('#invite-feedback').textContent.trim().length > 0")
+        assert page.locator("#invite-feedback").is_visible()
         expected = 1 if page.evaluate("() => !!navigator.share") else 0
         assert page.locator('[data-action="share"]').count() == expected
 
@@ -695,9 +697,9 @@ def test_opening_deal_reveals_cards_one_by_one(r: Runner) -> None:
         r.ready(page)
         page.locator("#names").fill("Ann, Bob")
         page.locator("#btn-start").click()
-        page.wait_for_selector("#invite-dialog[open]")
-        page.locator("#invite-close").click()
         page.wait_for_function("() => document.querySelectorAll('.player-card .card').length === 2")
+        assert page.locator("#invite-dialog").evaluate("d => !d.open"), "invite dialog covered the deal"
+        assert page.locator("#deal-hint").is_visible()
         info = page.evaluate(
             """() => [...document.querySelectorAll('.player-card .card')].map(c => {
                  const style = getComputedStyle(c);
@@ -707,6 +709,7 @@ def test_opening_deal_reveals_cards_one_by_one(r: Runner) -> None:
         assert len(info) == 2
         assert all(x["name"] == "card-deal" for x in info), f"deal animation missing: {info}"
         assert info[0]["delay"] != info[1]["delay"], f"cards were not staggered: {info}"
+        page.wait_for_selector("#invite-dialog[open]")
 
 
 def test_no_invite_button_at_round_end(r: Runner) -> None:
@@ -720,6 +723,67 @@ def test_no_invite_button_at_round_end(r: Runner) -> None:
         page.wait_for_selector('[data-action="next"]')
         assert page.locator('#dock [data-action="invite"]').count() == 0
         assert page.locator("#dock-prompt").inner_text().strip()
+
+
+def test_copy_feedback_stays_inside_invite_dialog(r: Runner) -> None:
+    with r.page() as page:
+        page.goto(r.base_url + "/")
+        r.ready(page)
+        page.locator("#names").fill("Ann, Bob")
+        page.locator("#btn-start").click()
+        page.wait_for_selector("#invite-dialog[open]")
+        button = page.locator(".invite-row").nth(1).locator('[data-action="copy"]')
+
+        page.evaluate(
+            "() => Object.defineProperty(navigator, 'clipboard', {configurable: true, "
+            "value: {writeText: () => Promise.resolve()}})"
+        )
+        button.click()
+        page.wait_for_function("() => document.querySelector('#invite-feedback').textContent.includes('copied')")
+        assert page.locator("#invite-feedback").is_visible()
+        assert button.inner_text().strip().lower() == "link copied"
+
+        page.evaluate(
+            "() => Object.defineProperty(navigator, 'clipboard', {configurable: true, "
+            "value: {writeText: () => Promise.reject(new Error('denied'))}})"
+        )
+        button.click()
+        page.wait_for_function("() => document.querySelector('#invite-feedback').textContent.includes('failed')")
+        field = page.locator(".invite-row").nth(1).locator("textarea.invite-link")
+        assert field.evaluate(
+            "e => document.activeElement === e && e.selectionEnd - e.selectionStart === e.value.length"
+        ), "failed copy did not select the link for manual copying"
+
+
+def test_spectator_sees_watching_prompt(r: Runner) -> None:
+    view = r.create(("Ann", "Bob"))
+    with r.page() as page:
+        page.goto(r.base_url + "/?game=" + view["id"])
+        r.ready(page)
+        page.wait_for_selector("#table-screen:not([hidden])")
+        assert page.locator("#dock-prompt").inner_text().strip() == "You are watching this game."
+        assert page.locator('#dock [data-action="hit"]').count() == 0
+
+
+def test_card_labels_and_deal_hint_follow_play(r: Runner) -> None:
+    view = r.create(("Ann", "Bob"))
+    state = r.clean(view["id"])
+    state["players"][0]["numbers"] = [5]
+    state["deck"] = [6]
+    r.store(view["id"], state)
+    with r.page() as page:
+        r.join(page, view, 0)
+        page.wait_for_selector('[data-action="hit"]')
+        page.locator('[data-action="hit"]').click()
+        page.wait_for_function(
+            "() => document.querySelectorAll('.player-card:first-child .card').length === 2"
+        )
+        labels = page.evaluate(
+            "() => [...document.querySelectorAll('.player-card:first-child .card')]"
+            ".map(c => c.getAttribute('aria-label'))"
+        )
+        assert labels == ["Card: 5", "New card: 6"], labels
+        assert page.locator("#deal-hint").is_hidden(), "opening-deal hint lingered after the first draw"
 
 
 def test_keyboard_shortcuts_and_guards(r: Runner) -> None:

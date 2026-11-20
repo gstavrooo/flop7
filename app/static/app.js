@@ -43,6 +43,7 @@
   let stream = null;
   let reconnectTimer = null;
   let toastTimer = null;
+  let inviteFeedbackTimer = null;
   let lastEventId = 0;
   let busy = false;
   let soundOn = Storage.get("sound") !== false;
@@ -51,6 +52,7 @@
   // revealed one by one instead of appearing all at once (see renderPlayers).
   let lastSeatCards = null;
   let cardDealAt = {};
+  let newCardUntil = {};
   const DEAL_STEP_MS = 180;
   const DEAL_DURATION_MS = 380;
 
@@ -60,7 +62,7 @@
     form: $("setup-form"), names: $("names"), botChip: $("bot-chip"),
     addBot: $("add-bot"), hotseat: $("hotseat"), preview: $("participant-preview"),
     setupError: $("setup-error"), btnStart: $("btn-start"),
-    players: $("players"), winnerBanner: $("winner-banner"),
+    players: $("players"), dealHint: $("deal-hint"), winnerBanner: $("winner-banner"),
     winnerTitle: $("winner-title"), winnerMargin: $("winner-margin"),
     summary: $("round-summary"), summaryTitle: $("round-summary-title"),
     results: $("round-results"),
@@ -71,6 +73,7 @@
     btnRules: $("btn-rules"), btnLanguage: $("btn-language"),
     btnSound: $("btn-sound"), btnTheme: $("btn-theme"),
     inviteDialog: $("invite-dialog"), inviteList: $("invite-list"),
+    inviteFeedback: $("invite-feedback"),
     rulesDialog: $("rules-dialog"), cardDialog: $("card-dialog"),
     cardExplanation: $("card-explanation")
   };
@@ -212,7 +215,7 @@
   // ---- view / events ----
   function applyView(view) {
     const first = game === null;
-    if (first || view.id !== gameId) { lastSeatCards = null; cardDealAt = {}; }
+    if (first || view.id !== gameId) { lastSeatCards = null; cardDealAt = {}; newCardUntil = {}; }
     game = view;
     gameId = view.id;
     if (first && view.events && view.events.length) lastEventId = maxId(view.events);
@@ -272,12 +275,15 @@
       renderPlayers();
       renderSummary();
       renderWinner();
+      renderDealHint();
     } else {
       els.players.textContent = "";
+      els.dealHint.hidden = true;
       els.summary.hidden = true;
       els.winnerBanner.hidden = true;
       lastSeatCards = null;
       cardDealAt = {};
+      newCardUntil = {};
     }
     renderDock();
     updateTitle();
@@ -344,6 +350,7 @@
     // that order so the opening deal is visible. A re-render reuses the absolute
     // start times; a negative CSS animation-delay resumes instead of restarting.
     const now = Date.now();
+    const firstRender = lastSeatCards === null; // cards already on the table when we arrived
     const count = game.players.length;
     const freshList = [];
     fresh.forEach(function (flags, seat) {
@@ -355,9 +362,13 @@
     freshList.forEach(function (entry, step) {
       const key = dealKey(entry.seat, entry.index, current[entry.seat][entry.index]);
       if (cardDealAt[key] === undefined) cardDealAt[key] = now + step * DEAL_STEP_MS;
+      if (!firstRender && newCardUntil[key] === undefined) newCardUntil[key] = now + 2500;
     });
     Object.keys(cardDealAt).forEach(function (key) {
       if (cardDealAt[key] < now - (DEAL_DURATION_MS + 2000)) delete cardDealAt[key];
+    });
+    Object.keys(newCardUntil).forEach(function (key) {
+      if (newCardUntil[key] < now) delete newCardUntil[key];
     });
 
     game.players.forEach(function (player, seat) {
@@ -402,13 +413,23 @@
         }
         button.type = "button";
         button.setAttribute("data-card", text);
-        button.setAttribute("aria-label", t("newCard", { card: text }));
+        const announced = newCardUntil[dealKey(seat, index, text)] ? "newCard" : "card.label";
+        button.setAttribute("aria-label", t(announced, { card: text }));
         cards.appendChild(button);
       });
       card.appendChild(cards);
       els.players.appendChild(card);
     });
     lastSeatCards = current;
+  }
+
+  // Explains the face-up card everyone already holds when a round begins.
+  function renderDealHint() {
+    const opening = !game.round_over && game.winner === null &&
+      game.players.every(function (player) {
+        return player.numbers.length + player.mods.length <= 1;
+      });
+    els.dealHint.hidden = !opening;
   }
 
   function renderSummary() {
@@ -508,9 +529,12 @@
       els.dockActions.appendChild(makeButton("btn-hit", t("action.hit"), "hit"));
       els.dockActions.appendChild(makeButton("btn-stay", t("action.stay"), "stay"));
       setWaiting("ready");
-    } else {
+    } else if (anyControl()) {
       els.dockPrompt.textContent = t("dock.waiting", { name: game.players[game.turn].name });
       setWaiting("wait");
+    } else {
+      els.dockPrompt.textContent = t("dock.spectator");
+      setWaiting("none");
     }
   }
 
@@ -583,7 +607,7 @@
     try {
       await startNewGame(names, withBot);
       Storage.set("setup", { names: names.join(", "), bot: withBot, hotseat: hotseat });
-      openInvites();
+      openInvitesAfterDeal();
     } catch (err) {
       setSetupError(translateError(err.detail));
     }
@@ -597,7 +621,7 @@
     const withBot = game.players.some(function (p) { return p.bot; });
     try {
       await startNewGame(names, withBot); // mySeat + hotseat stay the same
-      toast(t("invite.title"));
+      openInvitesAfterDeal();
     } catch (err) {
       toast(translateError(err.detail));
     } finally {
@@ -676,13 +700,33 @@
     }
   }
 
-  function copyLink(link) {
+  // The toast would sit behind a modal dialog's backdrop, so invite feedback
+  // lives inside the dialog instead.
+  function setInviteFeedback(message) {
+    els.inviteFeedback.textContent = message;
+    if (inviteFeedbackTimer) clearTimeout(inviteFeedbackTimer);
+    inviteFeedbackTimer = setTimeout(function () { els.inviteFeedback.textContent = ""; }, 3500);
+  }
+
+  function copyLink(link, button) {
+    const row = button && button.closest(".invite-row");
+    const field = row && row.querySelector("textarea.invite-link");
+    function failed() {
+      if (field) { field.focus(); field.select(); }
+      setInviteFeedback(t("invite.copyFailed"));
+    }
     if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(link).then(function () { toast(t("invite.copied")); })
-        .catch(function () { toast(t("invite.copied")); });
+      navigator.clipboard.writeText(link).then(function () {
+        setInviteFeedback(t("invite.copied"));
+        if (button) {
+          const label = t("invite.copy");
+          button.textContent = t("invite.copied");
+          setTimeout(function () { button.textContent = label; }, 2000);
+        }
+      }).catch(failed);
       return;
     }
-    toast(t("invite.copied"));
+    failed();
   }
 
   function shareLink(link) {
@@ -692,8 +736,20 @@
 
   function openInvites() {
     renderInviteList();
+    if (inviteFeedbackTimer) { clearTimeout(inviteFeedbackTimer); inviteFeedbackTimer = null; }
+    els.inviteFeedback.textContent = "";
     if (!els.inviteDialog.open) els.inviteDialog.showModal();
     fitInviteLinks();
+  }
+
+  // Let the opening deal play on the table before covering it with the dialog.
+  function openInvitesAfterDeal() {
+    const id = gameId;
+    const count = game ? game.players.length : 2;
+    const wait = DEAL_STEP_MS * (count - 1) + DEAL_DURATION_MS + 400;
+    setTimeout(function () {
+      if (gameId === id && game && !els.inviteDialog.open) openInvites();
+    }, wait);
   }
 
   function openRules() {
@@ -844,7 +900,7 @@
     else if (action === "target") doMove("target", Number(button.getAttribute("data-value")));
     else if (action === "rematch") rematch();
     else if (action === "invite") openInvites();
-    else if (action === "copy") copyLink(button.getAttribute("data-value"));
+    else if (action === "copy") copyLink(button.getAttribute("data-value"), button);
     else if (action === "share") shareLink(button.getAttribute("data-value"));
     else if (action === "qr") renderQr(button);
   });

@@ -694,6 +694,51 @@ def test_topbar_icon_labels_and_sound_pressed(r: Runner) -> None:
         assert page.locator("#btn-sound").get_attribute("aria-label")
 
 
+def test_text_contrast_on_dotted_background_and_topbar(r: Runner) -> None:
+    """Grey hint text and top-left controls must stay readable in both themes."""
+    measure = """() => {
+      const css = (el, prop) => getComputedStyle(el).getPropertyValue(prop).trim();
+      const rgb = (s) => (s.match(/\\d+(\\.\\d+)?/g) || []).slice(0, 3).map(Number);
+      const lum = (c) => {
+        const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+        return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]);
+      };
+      const ratio = (a, b) => {
+        const x = lum(a), y = lum(b);
+        return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+      };
+      const hex = (s) => s.replace('#', '').match(/../g).map((h) => parseInt(h, 16));
+      const bgOf = (el) => {
+        let node = el;
+        while (node) {
+          const bg = css(node, 'background-color');
+          if (bg && !/rgba\\(0, 0, 0, 0\\)|transparent/.test(bg)) return rgb(bg);
+          node = node.parentElement;
+        }
+        return [0, 0, 0];
+      };
+      const root = document.documentElement;
+      return {
+        hint: ratio(rgb(css(document.querySelector('.hint'), 'color')),
+                    bgOf(document.querySelector('.hint'))),
+        icon: ratio(rgb(css(document.querySelector('#btn-rules'), 'color')),
+                    bgOf(document.querySelector('#btn-rules'))),
+        pressed: ratio(rgb(css(document.querySelector('#btn-sound'), 'color')),
+                       bgOf(document.querySelector('#btn-sound'))),
+        dotVsText: Math.abs(lum(hex(css(root, '--dot'))) - lum(hex(css(root, '--muted'))))
+      };
+    }"""
+    with r.page() as page:
+        page.goto(r.base_url + "/")
+        r.ready(page)
+        for mode in ("light", "dark"):
+            page.evaluate("mode => Flop7Theme.set(mode)", mode)
+            values = page.evaluate(measure)
+            for key in ("hint", "icon", "pressed"):
+                assert values[key] >= 4.5, f"{mode}: {key} contrast {values[key]:.2f} < 4.5"
+            assert values["dotVsText"] >= 0.15, f"{mode}: dots blend with text ({values['dotVsText']:.2f})"
+
+
 def run_tests(runner: Runner) -> list[tuple[str, Exception]]:
     tests = [
         (name, func)

@@ -1230,6 +1230,7 @@ def test_event_line_shows_translated_action(r: Runner) -> None:
 
 def test_hotseat_prompt_names_the_current_player(r: Runner) -> None:
     view = r.create(("Ann", "Bob"))
+    r.store(view["id"], r.clean(view["id"]))  # deterministic: no opening action card
     token = view["seats"][0]["token"]
     with r.page() as page:
         page.goto(r.base_url + "/")

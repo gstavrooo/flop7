@@ -60,6 +60,13 @@
   const SAFE_RETRY_DELAYS_MS = [1500, 3000];
   let pendingRequests = 0;
   let retryFn = null;
+  // UI state that must survive re-renders without rebuilding the dock or dialogs.
+  let loading = false;
+  let creating = false;
+  let dockSignature = "";
+  let inviteSignature = "";
+  let eventTimer = null;
+  let lastTurnSeat = null;
 
   const $ = function (id) { return document.getElementById(id); };
   const els = {
@@ -76,8 +83,10 @@
     waitingFill: $("waiting-fill"),
     toast: $("toast"), toastText: $("toast-text"), toastRetry: $("toast-retry"),
     wake: $("wake-banner"), chip: $("connection-chip"), storageHint: $("storage-hint"),
+    loadingScreen: $("loading-screen"),
+    dockEvent: $("dock-event"), tieBanner: $("tie-banner"),
     btnRules: $("btn-rules"), btnLanguage: $("btn-language"),
-    btnSound: $("btn-sound"), btnTheme: $("btn-theme"),
+    btnSound: $("btn-sound"), btnTheme: $("btn-theme"), btnNewGame: $("btn-new-game"),
     inviteDialog: $("invite-dialog"), inviteList: $("invite-list"),
     inviteFeedback: $("invite-feedback"),
     rulesDialog: $("rules-dialog"), cardDialog: $("card-dialog"),
@@ -123,6 +132,50 @@
     button.setAttribute("data-action", action);
     if (value !== undefined) button.setAttribute("data-value", String(value));
     return button;
+  }
+
+  // Action cards travel through the API as internal keys; never show those to players.
+  function cardName(value) {
+    const text = String(value);
+    return text === "freeze" || text === "flip3" || text === "second"
+      ? t("cardName." + text) : text;
+  }
+
+  function playerName(seat) {
+    return game && game.players[seat] ? game.players[seat].name : String(seat);
+  }
+
+  function eventText(event) {
+    const seat = event.seat !== undefined ? event.seat : event.by;
+    const name = playerName(seat);
+    const target = event.target !== undefined ? playerName(event.target) : "";
+    const card = event.card !== undefined ? cardName(event.card) : "";
+    switch (event.type) {
+      case "draws": return t("event.draws", { name: name, card: card });
+      case "bust": return t("event.bust", { name: name, card: card });
+      case "second": return t(event.used ? "event.secondUsed" : "event.secondGained", { name: name });
+      case "gives": return t("event.gives", { name: name, target: target });
+      case "freezes": return t("event.freezes", { name: name, target: target });
+      case "flip3": return t("event.flip3", { name: name, target: target });
+      case "flop7": return t("event.flop7", { name: name });
+      case "reshuffle": return t("event.reshuffle");
+      case "next": return t("event.next", { round: event.round });
+      default: return "";
+    }
+  }
+
+  function showEvent(event) {
+    const text = eventText(event);
+    if (!text) return;
+    els.dockEvent.textContent = text;
+    if (eventTimer) clearTimeout(eventTimer);
+    eventTimer = setTimeout(function () { els.dockEvent.textContent = ""; }, 4000);
+  }
+
+  function clearEvent() {
+    if (eventTimer) clearTimeout(eventTimer);
+    eventTimer = null;
+    els.dockEvent.textContent = "";
   }
 
   // ---- network ----
@@ -265,7 +318,15 @@
   // ---- view / events ----
   function applyView(view) {
     const first = game === null;
-    if (first || view.id !== gameId) { lastSeatCards = null; cardDealAt = {}; newCardUntil = {}; }
+    if (first || view.id !== gameId) {
+      lastSeatCards = null;
+      cardDealAt = {};
+      newCardUntil = {};
+      lastTurnSeat = null;
+      dockSignature = "";
+      inviteSignature = "";
+      clearEvent();
+    }
     game = view;
     gameId = view.id;
     if (first && view.events && view.events.length) lastEventId = maxId(view.events);
@@ -278,6 +339,7 @@
       if (typeof event.id === "number" && event.id > lastEventId) {
         lastEventId = event.id;
         if (event.type === "next") lastSeatCards = null; // a fresh round starts empty
+        showEvent(event);
         if (soundOn) beep(event.type);
       }
     });
@@ -313,31 +375,46 @@
   }
 
   // ---- rendering ----
+  function inviteSignatureKey() {
+    return JSON.stringify(inviteSeats.map(function (s) { return [s.seat, s.name, s.token]; }));
+  }
+
   function render() {
     I18n.apply(document);
     els.storageHint.hidden = Storage.available();
     const inGame = game !== null;
-    els.setupScreen.hidden = inGame;
-    els.tableScreen.hidden = !inGame;
+    els.loadingScreen.hidden = !loading;
+    document.body.classList.toggle("is-loading", loading);
+    document.body.classList.toggle("is-setup", !inGame && !loading);
+    els.btnNewGame.hidden = !inGame;
+    els.setupScreen.hidden = inGame || loading;
+    els.tableScreen.hidden = !inGame || loading;
     renderTopbar();
     updatePreview();
-    if (inGame) {
+    if (inGame && !loading) {
       renderPlayers();
       renderSummary();
       renderWinner();
+      renderTie();
       renderDealHint();
     } else {
       els.players.textContent = "";
       els.dealHint.classList.add("is-placeholder");
       els.summary.hidden = true;
       els.winnerBanner.hidden = true;
+      els.tieBanner.hidden = true;
       lastSeatCards = null;
       cardDealAt = {};
       newCardUntil = {};
     }
     renderDock();
     updateTitle();
-    if (els.inviteDialog.open) { renderInviteList(); fitInviteLinks(); }
+    const sig = inviteSignatureKey();
+    if (els.inviteDialog.open && sig !== inviteSignature) {
+      renderInviteList();
+      fitInviteLinks();
+      inviteSignature = sig;
+    }
   }
 
   function renderTopbar() {
@@ -425,6 +502,9 @@
       const card = el("div", "player-card");
       if (!game.round_over && game.winner === null && seat === game.turn) card.classList.add("is-turn");
       if (!hotseat && seat === mySeat) card.classList.add("is-mine");
+      if (game.pending && game.pending.length && game.targets.indexOf(seat) !== -1) {
+        card.classList.add("is-target");
+      }
 
       const name = el("h3", "player-name");
       if (player.bot) name.appendChild(el("span", null, "🤖"));
@@ -447,9 +527,15 @@
 
       // Reserve the badge row so gaining a status never changes the card height.
       const statusSlot = el("div", "player-status");
+      if (game.pending && game.pending.length && game.targets.indexOf(seat) !== -1) {
+        statusSlot.appendChild(el("span", "target-flag", t("table.target")));
+      }
       if (player.second) statusSlot.appendChild(el("span", "second-flag", t("table.second")));
       const status = statusFor(player, seat);
       if (status) statusSlot.appendChild(el("span", "status-badge " + status.cls, t(status.key)));
+      if (player.frozen === true) {
+        statusSlot.appendChild(el("span", "status-badge status-frozen", t("status.frozen")));
+      }
       card.appendChild(statusSlot);
 
       const newest = newestCardFor(seat);
@@ -464,6 +550,9 @@
           button.style.animationDelay = (dealAt - Date.now()) + "ms";
         }
         button.type = "button";
+        // Cards are informational; keeping them out of the tab order avoids
+        // dozens of tab stops before the dock controls.
+        button.tabIndex = -1;
         button.setAttribute("data-card", text);
         const announced = newCardUntil[dealKey(seat, index, text)] ? "newCard" : "card.label";
         button.setAttribute("aria-label", t(announced, { card: text }));
@@ -473,6 +562,25 @@
       els.players.appendChild(card);
     });
     lastSeatCards = current;
+
+    // Follow the active seat in hot-seat games: with several players the card
+    // can be far below the fold, while the dock only shows the action.
+    const turnChanged = lastTurnSeat !== null && lastTurnSeat !== game.turn;
+    lastTurnSeat = game.turn;
+    if (turnChanged && !document.querySelector("dialog[open]") &&
+        !game.round_over && game.winner === null) {
+      const active = els.players.querySelector(".player-card.is-turn");
+      if (active) {
+        const box = active.getBoundingClientRect();
+        const dock = document.getElementById("dock");
+        const limit = dock ? dock.getBoundingClientRect().top : window.innerHeight;
+        if (box.top < 0 || box.bottom > limit) {
+          const reduce = window.matchMedia &&
+            window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+          active.scrollIntoView({ block: "nearest", behavior: reduce ? "auto" : "smooth" });
+        }
+      }
+    }
   }
 
   // Explains the face-up card everyone already holds when a round begins.
@@ -517,20 +625,38 @@
     els.winnerMargin.textContent = t("winner.margin", { margin: Math.max(0, gap) });
   }
 
+  function renderTie() {
+    if (!game || !game.round_over || game.winner !== null) {
+      els.tieBanner.hidden = true;
+      return;
+    }
+    const totals = game.players.map(function (p) { return p.total; });
+    const best = Math.max.apply(null, totals);
+    const leaders = totals.filter(function (value) { return value === best; });
+    const show = best >= 200 && leaders.length > 1;
+    els.tieBanner.hidden = !show;
+    if (show) els.tieBanner.textContent = t("tie.title");
+  }
+
   function setWaiting(level) {
     els.waitingFill.className = "waiting-fill w-" + level;
   }
 
   function renderDock() {
-    els.dockActions.textContent = "";
-    if (!game) {
-      // The bottom bar is the setup call to action; no prompt text needed.
-      els.dockRound.textContent = "";
-      els.dockPrompt.textContent = "";
-      els.dockDeck.textContent = "";
-      const start = makeButton("btn btn-primary", t("setup.start"), "start");
-      start.id = "btn-start"; // stable hook for keyboard/mobile checks
-      els.dockActions.appendChild(start);
+    if (!game || loading) {
+      els.dockActions.textContent = "";
+      dockSignature = "";
+      if (!game) {
+        // The bottom bar is the setup call to action; no prompt text needed.
+        els.dockRound.textContent = "";
+        els.dockPrompt.textContent = "";
+        els.dockDeck.textContent = "";
+        const start = makeButton("btn btn-primary", t("setup.start"), "start");
+        start.id = "btn-start"; // stable hook for keyboard/mobile checks
+        els.dockActions.appendChild(start);
+      } else {
+        els.dockPrompt.textContent = t("loading.title");
+      }
       setWaiting("none");
       return;
     }
@@ -539,57 +665,65 @@
     els.dockRound.textContent = t("dock.round", { round: game.round });
     els.dockDeck.textContent = t("dock.deck", { count: game.deck_count });
 
+    let promptText = "";
+    let level = "none";
+    const actions = [];
+
     if (game.winner !== null) {
-      els.dockPrompt.textContent = t("winner.title", { name: game.players[game.winner].name });
-      if (anyControl()) els.dockActions.appendChild(makeButton("btn-next", t("action.rematch"), "rematch"));
-      els.dockActions.appendChild(makeButton("btn", t("action.invite"), "invite"));
-      setWaiting("ready");
-      return;
-    }
-
-    if (game.round_over) {
-      els.dockPrompt.textContent = t("dock.break");
-      if (anyControl()) els.dockActions.appendChild(makeButton("btn-next", t("action.next"), "next"));
-      setWaiting("ready");
-      return;
-    }
-
-    if (game.pending && game.pending.length) {
+      promptText = t("winner.title", { name: game.players[game.winner].name });
+      if (anyControl()) actions.push(["btn-next", t("action.rematch"), "rematch", undefined]);
+      if (inviteSeats.length) actions.push(["btn", t("action.invite"), "invite", undefined]);
+      level = "ready";
+    } else if (game.round_over) {
+      promptText = t("dock.break");
+      if (anyControl()) actions.push(["btn-next", t("action.next"), "next", undefined]);
+      level = "ready";
+    } else if (game.pending && game.pending.length) {
       const pending = game.pending[0];
       const kind = pending.kind === "give" ? "second" : pending.kind;
-      els.dockPrompt.textContent = t("dock.target", { card: kind });
+      promptText = t("dock.target", { card: cardName(kind) });
       if (controls(pending.by)) {
         game.targets.forEach(function (seat, index) {
-          els.dockActions.appendChild(makeButton(
-            "btn-target", t("dock.targetChoice", { n: index + 1, name: game.players[seat].name }),
-            "target", seat
-          ));
+          actions.push([
+            "btn-target",
+            t("dock.targetChoice", { n: index + 1, name: game.players[seat].name }),
+            "target",
+            seat
+          ]);
         });
-        setWaiting("ready");
+        level = "ready";
       } else {
-        setWaiting("wait");
+        level = "wait";
       }
-      return;
-    }
-
-    if (isBotTurn()) {
-      els.dockPrompt.textContent = t("dock.thinking", { name: game.players[game.turn].name });
-      setWaiting("think");
-      return;
-    }
-
-    if (controls(game.turn)) {
-      els.dockPrompt.textContent = t("dock.yourTurn");
-      els.dockActions.appendChild(makeButton("btn-hit", t("action.hit"), "hit"));
-      els.dockActions.appendChild(makeButton("btn-stay", t("action.stay"), "stay"));
-      setWaiting("ready");
+    } else if (isBotTurn()) {
+      promptText = t("dock.thinking", { name: game.players[game.turn].name });
+      level = "think";
+    } else if (controls(game.turn)) {
+      promptText = hotseat
+        ? t("dock.yourTurnName", { name: game.players[game.turn].name })
+        : t("dock.yourTurn");
+      actions.push(["btn-hit", t("action.hit"), "hit", undefined]);
+      actions.push(["btn-stay", t("action.stay"), "stay", undefined]);
+      level = "ready";
     } else if (anyControl()) {
-      els.dockPrompt.textContent = t("dock.waiting", { name: game.players[game.turn].name });
-      setWaiting("wait");
+      promptText = t("dock.waiting", { name: game.players[game.turn].name });
+      level = "wait";
     } else {
-      els.dockPrompt.textContent = t("dock.spectator");
-      setWaiting("none");
+      promptText = t("dock.spectator");
+      level = "none";
     }
+
+    els.dockPrompt.textContent = promptText;
+    setWaiting(level);
+    const signature = actions.map(function (a) {
+      return a[2] + ":" + (a[3] === undefined ? "" : a[3]) + ":" + a[1];
+    }).join("|");
+    if (signature === dockSignature) return;
+    dockSignature = signature;
+    els.dockActions.textContent = "";
+    actions.forEach(function (a) {
+      els.dockActions.appendChild(makeButton(a[0], a[1], a[2], a[3]));
+    });
   }
 
   function updateTitle() {
@@ -651,6 +785,7 @@
 
   async function createGame(event) {
     event.preventDefault();
+    if (creating || loading) return; // a slow cold start must not create two games
     const names = els.names.value.split(",").map(function (n) { return n.trim(); }).filter(Boolean);
     const withBot = els.addBot.checked;
     if (names.length + Number(withBot) < 2) { setSetupError(t("setup.errorEmpty")); return; }
@@ -660,6 +795,8 @@
       return;
     }
     clearSetupError();
+    creating = true;
+    setStartBusy(true);
     mySeat = 0;
     hotseat = els.hotseat.checked;
     try {
@@ -670,7 +807,41 @@
     } catch (err) {
       if (err.status === 0 || err.status >= 500) toast(translateError(err.detail), err.retry);
       else setSetupError(translateError(err.detail));
+    } finally {
+      creating = false;
+      setStartBusy(false);
     }
+  }
+
+  function setStartBusy(busyNow) {
+    const start = $("btn-start");
+    if (!start) return;
+    start.disabled = busyNow;
+    start.textContent = t(busyNow ? "setup.starting" : "setup.start");
+  }
+
+  function leaveGame() {
+    if (!game || loading || !window.confirm(t("leave.confirm"))) return;
+    const id = gameId;
+    closeStream();
+    if (id) Storage.remove("game:" + id);
+    game = null;
+    gameId = null;
+    tokens = {};
+    inviteSeats = [];
+    mySeat = 0;
+    hotseat = true;
+    busy = false;
+    lastEventId = 0;
+    lastSeatCards = null;
+    cardDealAt = {};
+    newCardUntil = {};
+    lastTurnSeat = null;
+    dockSignature = "";
+    inviteSignature = "";
+    clearEvent();
+    history.replaceState(null, "", location.pathname);
+    render();
   }
 
   async function rematch() {
@@ -718,6 +889,7 @@
       if (navigator.share) actions.appendChild(makeButton("btn", t("invite.share"), "share", link));
       const qrButton = makeButton("btn", t("invite.qr"), "qr", link);
       qrButton.setAttribute("aria-label", t("invite.qrAlt"));
+      qrButton.setAttribute("aria-expanded", "false");
       actions.appendChild(qrButton);
       row.appendChild(actions);
 
@@ -726,6 +898,14 @@
       row.appendChild(slot);
       els.inviteList.appendChild(row);
     });
+    if (game.players.some(function (p) { return p.bot; })) {
+      const row = el("div", "invite-row");
+      const head = el("div", "invite-row-head");
+      head.appendChild(el("span", null, t("setup.botChip")));
+      row.appendChild(head);
+      row.appendChild(el("p", "dialog-hint", t("invite.bot")));
+      els.inviteList.appendChild(row);
+    }
   }
 
   // A wrapped textarea shows the whole (long) invite URL; size it to its content.
@@ -744,6 +924,7 @@
     if (!row) return;
     const slot = row.querySelector(".qr-slot");
     if (!slot) return;
+    button.setAttribute("aria-expanded", slot.hidden ? "true" : "false");
     if (!slot.hidden) { slot.hidden = true; slot.textContent = ""; return; }
     try {
       const qr = window.qrcode(0, "M");
@@ -794,7 +975,9 @@
   }
 
   function openInvites() {
+    if (!inviteSeats.length) return; // spectators and joined guests have no links
     renderInviteList();
+    inviteSignature = inviteSignatureKey();
     if (inviteFeedbackTimer) { clearTimeout(inviteFeedbackTimer); inviteFeedbackTimer = null; }
     els.inviteFeedback.textContent = "";
     if (!els.inviteDialog.open) els.inviteDialog.showModal();
@@ -894,6 +1077,8 @@
 
   async function loadGame() {
     if (!gameId) return;
+    loading = true;
+    render();
     try {
       const view = await api("/api/games/" + encodeURIComponent(gameId));
       applyView(view);
@@ -903,6 +1088,8 @@
       tokens = {};
       inviteSeats = [];
       game = null;
+    } finally {
+      loading = false;
       render();
     }
   }
@@ -948,8 +1135,8 @@
 
   // ---- wiring ----
   els.form.addEventListener("submit", createGame);
-  els.names.addEventListener("input", updatePreview);
-  els.addBot.addEventListener("change", updatePreview);
+  els.names.addEventListener("input", function () { clearSetupError(); updatePreview(); });
+  els.addBot.addEventListener("change", function () { clearSetupError(); updatePreview(); });
 
   document.addEventListener("click", function (event) {
     const button = event.target.closest("button[data-action]");
@@ -975,6 +1162,7 @@
   els.btnRules.addEventListener("click", openRules);
   els.btnLanguage.addEventListener("click", function () { I18n.cycleLanguage(); });
   els.btnTheme.addEventListener("click", function () { Theme.cycle(); });
+  els.btnNewGame.addEventListener("click", leaveGame);
   els.btnSound.addEventListener("click", function () {
     soundOn = !soundOn;
     Storage.set("sound", soundOn);
@@ -986,6 +1174,15 @@
     button.addEventListener("click", function () { button.closest("dialog").close(); });
   });
   $("invite-close").addEventListener("click", function () { els.inviteDialog.close(); });
+
+  document.querySelectorAll("dialog").forEach(function (dialog) {
+    dialog.addEventListener("click", function (event) {
+      if (event.target === dialog) dialog.close();
+    });
+  });
+  window.addEventListener("resize", function () {
+    if (els.inviteDialog.open) fitInviteLinks();
+  });
 
   document.addEventListener("flop7:languagechange", function () { render(); });
   document.addEventListener("flop7:themechange", function () { renderTopbar(); });
@@ -1018,7 +1215,7 @@
   });
 
   window.addEventListener("beforeunload", function (event) {
-    if (game && game.winner === null) {
+    if (game && game.winner === null && anyControl()) {
       event.preventDefault();
       event.returnValue = "";
     }

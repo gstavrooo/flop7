@@ -8,8 +8,11 @@
   --surface: #fffdf7;
   --muted: #454137; /* body text on paper: >= 9:1 (WCAG AA) */
   --dot: #c9c2b2;   /* dotted paper texture, deliberately lighter than text */
-  --border: #111111;
-  --shadow: #111111;
+  --border: #111111; /* black edge for bright accent islands */
+  --shadow: #111111; /* black shadow for bright accent islands */
+  --line: #111111;   /* neutral structural outline */
+  --edge-shadow: #111111; /* neutral structural shadow */
+  --progress-line: #111111;
   --yellow: #ffd93d;
   --pink: #ff8fc7;
   --cyan: #8ee6f0;
@@ -17,9 +20,11 @@
   --violet: #c4a6f5;
   --bust: #ff9d9d;
   --stayed: #8ee6f0;
+  --frozen: #9fd0ff;
   --shadow-offset: 5px;
   --border-width: 3px;
   --dock-height: 200px;
+  color-scheme: light;
   font-family: "Courier New", ui-monospace, monospace;
   color: var(--ink);
   background: var(--paper);
@@ -34,6 +39,10 @@
     --dot: #4a463d;   /* dark paper texture, deliberately darker than text */
     --border: #000000;
     --shadow: #000000;
+    --line: #c9c2b2;
+    --edge-shadow: #6b6457;
+    --progress-line: #c9c2b2;
+    color-scheme: dark;
   }
 }
 
@@ -45,6 +54,10 @@
   --dot: #c9c2b2;   /* dotted paper texture, deliberately lighter than text */
   --border: #111111;
   --shadow: #111111;
+  --line: #111111;
+  --edge-shadow: #111111;
+  --progress-line: #111111;
+  color-scheme: light;
 }
 
 :root[data-theme="dark"] {
@@ -55,6 +68,10 @@
   --dot: #4a463d;   /* dark paper texture, deliberately darker than text */
   --border: #000000;
   --shadow: #000000;
+  --line: #c9c2b2;
+  --edge-shadow: #6b6457;
+  --progress-line: #c9c2b2;
+  color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
@@ -86,6 +103,64 @@ button { font-family: inherit; }
 
 [hidden] { display: none !important; }
 
+/* ---------- accessibility utilities ---------- */
+.visually-hidden {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.skip-link {
+  position: absolute;
+  left: 8px;
+  top: 8px;
+  z-index: 200;
+  padding: 10px 14px;
+  color: #111;
+  background: var(--yellow);
+  border: var(--border-width) solid #111;
+  box-shadow: 4px 4px 0 #111;
+  font-weight: bold;
+  text-decoration: none;
+  transform: translateY(-200%);
+}
+.skip-link:focus,
+.skip-link:focus-visible { transform: translateY(0); }
+
+/* ---------- loading screen ---------- */
+.loading-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 24px;
+  text-align: center;
+  color: var(--ink);
+  background: var(--paper);
+}
+.loading-text { font-size: 16px; font-weight: bold; }
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid var(--line);
+  border-top-color: var(--pink);
+  border-radius: 50%;
+  animation: spinner-turn 0.8s linear infinite;
+}
+@keyframes spinner-turn { to { transform: rotate(360deg); } }
+body.is-loading { overflow: hidden; }
+
 /* ---------- topbar (6.3) ---------- */
 .topbar {
   position: sticky;
@@ -108,8 +183,8 @@ button { font-family: inherit; }
   font-size: 26px;
   color: var(--ink); /* --surface is dark in dark mode: never black-on-black */
   background: var(--surface);
-  border: var(--border-width) solid var(--border);
-  box-shadow: 3px 3px 0 var(--shadow);
+  border: var(--border-width) solid var(--line);
+  box-shadow: 3px 3px 0 var(--edge-shadow);
   padding: 2px 10px;
   transform: rotate(-4deg);
   white-space: nowrap;
@@ -135,13 +210,13 @@ button { font-family: inherit; }
   line-height: 1;
   color: var(--ink); /* readable on --surface in both themes */
   background: var(--surface);
-  border: var(--border-width) solid var(--border);
-  box-shadow: 3px 3px 0 var(--shadow);
+  border: var(--border-width) solid var(--line);
+  box-shadow: 3px 3px 0 var(--edge-shadow);
   cursor: pointer;
 }
 
-.icon-btn:hover { transform: translate(-1px, -1px); box-shadow: 4px 4px 0 var(--shadow); }
-.icon-btn:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--shadow); }
+.icon-btn:hover { transform: translate(-1px, -1px); box-shadow: 4px 4px 0 var(--edge-shadow); }
+.icon-btn:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--edge-shadow); }
 
 /* ---------- setup (6.4) ---------- */
 .storage-hint {
@@ -158,9 +233,9 @@ button { font-family: inherit; }
 .hint { color: var(--muted); margin: 0 0 18px; }
 
 .player-box {
-  border: var(--border-width) solid var(--border);
+  border: var(--border-width) solid var(--line);
   background: var(--surface);
-  box-shadow: var(--shadow-offset) var(--shadow-offset) 0 var(--shadow);
+  box-shadow: var(--shadow-offset) var(--shadow-offset) 0 var(--edge-shadow);
   padding: 14px;
 }
 
@@ -172,9 +247,10 @@ button { font-family: inherit; }
   min-width: 0;
   padding: 10px;
   font: inherit;
+  font-size: 16px; /* avoid iOS Safari focus zoom */
   color: var(--ink);
   background: var(--paper);
-  border: var(--border-width) solid var(--border);
+  border: var(--border-width) solid var(--line);
 }
 
 .bot-chip {
@@ -192,7 +268,7 @@ button { font-family: inherit; }
 
 .checks { display: flex; flex-wrap: wrap; gap: 16px 24px; margin: 14px 0 20px; }
 .check { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
-.check input { width: 18px; height: 18px; accent-color: #111; }
+.check input { width: 18px; height: 18px; accent-color: var(--ink); }
 
 .error {
   padding: 10px;
@@ -238,13 +314,29 @@ button { font-family: inherit; }
   flex-direction: column;
   padding: 14px;
   background: var(--surface);
-  border: var(--border-width) solid var(--border);
-  box-shadow: var(--shadow-offset) var(--shadow-offset) 0 var(--shadow);
+  border: var(--border-width) solid var(--line);
+  box-shadow: var(--shadow-offset) var(--shadow-offset) 0 var(--edge-shadow);
   /* Generous minimum keeps normal rounds stable; extra cards can still grow it. */
   min-height: 260px;
 }
-.player-card.is-turn { background: var(--yellow); color: #111; }
+.player-card.is-turn {
+  background: var(--yellow);
+  color: #111;
+  /* Yellow is a bright island: keep the black edge/shadow that reads on it. */
+  border-color: #111;
+  box-shadow: var(--shadow-offset) var(--shadow-offset) 0 #111;
+}
 .player-card.is-mine { outline: 3px dashed var(--ink); outline-offset: 3px; }
+.player-card.is-target {
+  /* Distinct from .is-turn (fill) and .is-mine (thin dashed ink): thick pink ring + lift. */
+  outline: 4px dashed var(--pink);
+  outline-offset: 4px;
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-offset) var(--shadow-offset) 0 var(--pink);
+}
+.player-card.is-turn.is-mine { outline-color: #111; }
+.player-card.is-turn :focus-visible,
+.player-card.is-turn:focus-visible { outline-color: #111; }
 
 .player-name { font-family: "Arial Black", sans-serif; font-size: 17px; margin: 0 0 6px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .turn-marker { color: #111; }
@@ -276,10 +368,22 @@ button { font-family: inherit; }
 .status-badge.status-stayed { background: var(--stayed); }
 .status-badge.status-thinking { background: var(--violet); }
 .status-badge.status-finished { background: var(--green); }
+.status-badge.status-frozen { background: var(--frozen); }
+.target-flag {
+  display: inline-block;
+  padding: 2px 6px;
+  font-size: 11px;
+  font-weight: bold;
+  color: #111;
+  background: var(--violet);
+  border: 2px solid #111;
+}
 
 .progress { display: flex; gap: 3px; margin: 8px 0; }
-.progress-step { width: 14px; height: 8px; border: 2px solid #111; background: transparent; }
-.progress-step.filled { background: #111; }
+.progress-step { width: 14px; height: 8px; border: 2px solid var(--progress-line); background: transparent; }
+.progress-step.filled { background: var(--progress-line); }
+.player-card.is-turn .progress-step { border-color: #111; }
+.player-card.is-turn .progress-step.filled { background: #111; }
 
 .cards {
   display: flex;
@@ -302,7 +406,6 @@ button { font-family: inherit; }
   cursor: pointer;
 }
 /* Accent card faces stay light islands: black text in both themes. */
-.card.card-new { background: var(--pink); color: #111; box-shadow: 2px 2px 0 #111; }
 /* Freshly dealt cards appear one at a time in engine turn order (JS sets the delay). */
 @keyframes card-deal {
   from { opacity: 0; transform: translateY(-16px) rotate(-8deg) scale(0.8); }
@@ -313,6 +416,12 @@ button { font-family: inherit; }
 .card.card-number { background: var(--cyan); color: #111; }
 .card.card-plus, .card.card-x2 { background: var(--green); color: #111; }
 .card.card-action { background: var(--violet); color: #111; }
+/* Newest card: keep its type colour and add a persistent pink ring (not colour alone). */
+.card.card-new {
+  position: relative;
+  z-index: 1;
+  box-shadow: 0 0 0 3px var(--pink), 3px 3px 0 #111;
+}
 .second-flag { font-weight: bold; color: #111; background: var(--green); border: 2px solid #111; padding: 2px 6px; }
 .deal-hint {
   margin: 14px 0 0;
@@ -355,6 +464,18 @@ button { font-family: inherit; }
 .winner-title { display: block; font-size: 30px; }
 .winner-margin { display: block; font-weight: bold; }
 
+.tie-banner {
+  margin: 0 auto 18px;
+  padding: 12px 16px;
+  text-align: center;
+  font-size: 18px;
+  font-weight: bold;
+  color: #111;
+  background: var(--violet);
+  border: var(--border-width) solid #111;
+  box-shadow: var(--shadow-offset) var(--shadow-offset) 0 #111;
+}
+
 /* ---------- dock (6.5): fixed height, never jumps ---------- */
 .dock {
   position: fixed;
@@ -365,21 +486,35 @@ button { font-family: inherit; }
   height: var(--dock-height);
   padding: 10px 16px 0;
   background: var(--surface);
-  border-top: var(--border-width) solid var(--border);
-  box-shadow: 0 -5px 0 var(--shadow);
+  border-top: var(--border-width) solid var(--line);
+  box-shadow: 0 -5px 0 var(--edge-shadow);
   display: flex;
   flex-direction: column;
 }
 .dock-top { display: flex; justify-content: center; gap: 24px; font-weight: bold; text-align: center; }
 .dock-deck { white-space: nowrap; }
+/* One reserved line for the latest table event: no layout jump when it changes. */
+.dock-event {
+  min-height: 1.2em;
+  margin: 2px 0 0;
+  font-size: 12px;
+  line-height: 1.2;
+  font-weight: normal;
+  text-align: center;
+  color: var(--muted);
+}
 .dock-prompt { margin: 8px 0; font-size: 16px; font-weight: bold; min-height: 2.4em; text-align: center; }
 .dock-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; align-content: flex-start; flex: 1; overflow-y: auto; text-align: center; }
-.waiting-bar { height: 8px; flex: none; margin: 8px -16px 0; background: var(--paper); border-top: 2px solid var(--border); }
+.waiting-bar { height: 8px; flex: none; margin: 8px -16px 0; background: var(--paper); border-top: 2px solid var(--line); }
 .waiting-fill { display: block; height: 100%; width: 0; background: var(--green); transition: width 0.2s linear; }
 .waiting-fill.w-none { width: 0; }
 .waiting-fill.w-wait { width: 35%; }
 .waiting-fill.w-think { width: 70%; background: var(--violet); }
 .waiting-fill.w-ready { width: 100%; }
+
+/* On the setup screen the dock only holds the start button: do not reserve 200px. */
+body.is-setup { padding-bottom: 110px; }
+body.is-setup .dock { height: auto; min-height: 0; padding-bottom: 12px; }
 
 /* ---------- toast + connection chip (6.6) ---------- */
 .toast {
@@ -444,8 +579,8 @@ button { font-family: inherit; }
   padding: 20px;
   color: var(--ink);
   background: var(--surface);
-  border: 4px solid var(--border);
-  box-shadow: 10px 10px 0 var(--shadow);
+  border: 4px solid var(--line);
+  box-shadow: 10px 10px 0 var(--edge-shadow);
 }
 .dialog::backdrop { background: rgba(0, 0, 0, 0.55); }
 .dialog-title { font-size: 22px; margin: 0 0 12px; }
@@ -466,7 +601,7 @@ button { font-family: inherit; }
 /* Wider so long invite URLs fit; each row wraps its link onto a few lines. */
 #invite-dialog { width: min(94vw, 680px); }
 .invite-list { display: grid; gap: 14px; }
-.invite-row { padding: 12px; border: var(--border-width) solid var(--border); background: var(--paper); }
+.invite-row { padding: 12px; border: var(--border-width) solid var(--line); background: var(--paper); }
 .invite-row .invite-link {
   display: block;
   width: 100%;
@@ -477,7 +612,7 @@ button { font-family: inherit; }
   line-height: 1.35;
   color: var(--ink);
   background: var(--surface);
-  border: var(--border-width) solid var(--border);
+  border: var(--border-width) solid var(--line);
   overflow: hidden;
   resize: none;
   word-break: break-all;
@@ -494,7 +629,7 @@ button { font-family: inherit; }
   .tagline { display: none; }
   .wordmark { font-size: 21px; }
   .topbar { padding: 8px 10px; }
-  .icon-btn { width: 38px; height: 38px; font-size: 18px; }
+  .icon-btn { width: 44px; height: 44px; font-size: 18px; }
   .main { padding: 16px 12px; }
   .players { grid-template-columns: 1fr; }
   .dock { padding: 8px 12px 0; }
@@ -508,16 +643,27 @@ button { font-family: inherit; }
   .dialog-actions { flex-wrap: wrap; }
   .rules-list { gap: 10px; padding-left: 18px; }
   .rules-list span { font-size: 12px; }
+  /* Keep the celebratory banner inside a narrow phone viewport. */
+  .winner-banner.scale-2 { transform: scale(1.03) rotate(-1deg); }
+  .winner-banner.scale-3 { transform: scale(1.06) rotate(1deg); }
 }
 
 /* Landscape phones and short windows: keep the dock and dialogs usable. */
 @media (max-height: 560px) {
   :root { --dock-height: 140px; }
   .topbar { padding: 6px 10px; }
-  .icon-btn { width: 34px; height: 34px; font-size: 16px; }
+  .icon-btn { width: 44px; height: 44px; font-size: 16px; }
   .dock { padding-top: 6px; }
   .dock-prompt { min-height: 1.6em; margin: 4px 0; font-size: 14px; }
   .dialog { max-height: 92vh; }
+  /* Landscape has very little vertical room: make a whole player card fit. */
+  .player-card { min-height: 0; padding: 6px; }
+  .player-name { font-size: 14px; margin-bottom: 0; }
+  .player-line { font-size: 11px; margin: 0; }
+  .progress { margin: 2px 0; }
+  .player-status { min-height: 12px; margin-top: 2px; }
+  .cards { min-height: 30px; margin-top: 2px; gap: 3px; }
+  .card { min-width: 30px; min-height: 30px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

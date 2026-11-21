@@ -1170,6 +1170,153 @@ def test_text_contrast_on_dotted_background_and_topbar(r: Runner) -> None:
             assert values["dotVsText"] >= 0.15, f"{mode}: dots blend with text ({values['dotVsText']:.2f})"
 
 
+def test_target_prompt_uses_card_names_and_marks_seats(r: Runner) -> None:
+    view = r.create(("Ann", "Bob", "Chris"))
+    state = r.clean(view["id"])
+    state["pending"] = [{"kind": "freeze", "by": 0, "target": None, "source": "hit"}]
+    state["discard"].append("freeze")
+    r.store(view["id"], state)
+    with r.page() as page:
+        r.join(page, view, 0)
+        page.wait_for_selector('[data-action="target"]')
+        prompt = page.locator("#dock-prompt").inner_text()
+        assert "target for Freeze" in prompt, prompt
+        assert "for freeze" not in prompt, prompt
+        assert page.locator(".player-card.is-target").count() == 3
+        assert page.locator(".target-flag").count() == 3
+        page.evaluate("() => Flop7I18n.setLanguage('de')")
+        assert "für Freeze" in page.locator("#dock-prompt").inner_text()
+
+
+def test_frozen_badge_is_distinct_from_stayed(r: Runner) -> None:
+    view = r.create(("Ann", "Bob"))
+    state = r.clean(view["id"])
+    state["players"][0].update(status="stayed", round_score=8, frozen=True)
+    r.store(view["id"], state)
+    with r.page() as page:
+        r.join(page, view, 0)
+        page.wait_for_selector(".status-frozen")
+        first = page.locator(".player-card").first
+        assert first.locator(".status-stayed").count() == 1
+        assert first.locator(".status-frozen").count() == 1
+        assert first.locator(".status-frozen").inner_text().strip().lower() == "frozen"
+
+
+def test_tie_banner_shows_when_200_is_shared(r: Runner) -> None:
+    view = r.create(("Ann", "Bob"))
+    state = r.clean(view["id"])
+    state.update(round_over=True, winner=None, last_round=LAST_ROUND)
+    for player in state["players"]:
+        player.update(total=200, status="stayed")
+    r.store(view["id"], state)
+    with r.page() as page:
+        r.join(page, view, 0)
+        page.wait_for_selector("#tie-banner:not([hidden])")
+        assert "tie" in page.locator("#tie-banner").inner_text().lower()
+
+
+def test_event_line_shows_translated_action(r: Runner) -> None:
+    view = r.create(("Ann", "Bob"))
+    r.store(view["id"], r.clean(view["id"]))
+    with r.page() as page:
+        r.join(page, view, 0)
+        page.wait_for_selector('[data-action="hit"]')
+        state = r.load(view["id"])
+        state["events"].append({"id": state["next_event_id"], "type": "freezes", "by": 0, "target": 1})
+        state["next_event_id"] += 1
+        r.store(view["id"], state)
+        page.wait_for_function("() => document.querySelector('#dock-event').textContent.includes('freezes')")
+
+
+def test_hotseat_prompt_names_the_current_player(r: Runner) -> None:
+    view = r.create(("Ann", "Bob"))
+    r.store(view["id"], r.clean(view["id"]))  # deterministic: no opening action card
+    token = view["seats"][0]["token"]
+    with r.page() as page:
+        page.goto(r.base_url + "/")
+        r.ready(page)
+        page.evaluate(
+            """(args) => {
+              localStorage.setItem('flop7:v1:game:' + args.id, JSON.stringify({
+                value: { tokens: {0: args.token}, mySeat: 0, hotseat: true, invites: [] }
+              }));
+            }""",
+            {"id": view["id"], "token": token},
+        )
+        page.goto(r.base_url + "/?game=" + view["id"])
+        r.ready(page)
+        page.wait_for_selector('[data-action="hit"]')
+        assert "Ann" in page.locator("#dock-prompt").inner_text()
+
+
+def test_deep_link_shows_loading_state(r: Runner) -> None:
+    view = r.create(("Ann", "Bob"))
+    with r.page() as page:
+
+        def slow_get(route: Any) -> None:
+            time.sleep(1.5)
+            route.continue_()
+
+        page.route("**/api/games/" + view["id"], slow_get)
+        page.goto(r.base_url + "/?game=" + view["id"], wait_until="commit")
+        page.wait_for_selector("#loading-screen:not([hidden])", timeout=5000)
+        assert page.locator("#setup-screen").is_hidden()
+        page.wait_for_selector("#table-screen:not([hidden])", timeout=10000)
+        assert page.locator("#loading-screen").is_hidden()
+
+
+def test_double_start_creates_only_one_game(r: Runner) -> None:
+    with r.page() as page:
+        calls = {"n": 0}
+
+        def slow_create(route: Any) -> None:
+            calls["n"] += 1
+            time.sleep(0.6)
+            route.continue_()
+
+        page.route("**/api/games", slow_create)
+        page.goto(r.base_url + "/")
+        r.ready(page)
+        page.locator("#names").fill("Ann, Bob")
+        page.evaluate("() => { const b = document.getElementById('btn-start'); b.click(); b.click(); }")
+        page.wait_for_selector("#table-screen:not([hidden])", timeout=10000)
+        assert calls["n"] == 1, f"created {calls['n']} games"
+
+
+def test_dock_focus_survives_state_refresh(r: Runner) -> None:
+    view = r.create(("Ann", "Bob"))
+    state = r.clean(view["id"])
+    state["deck"] = [1, 2]
+    r.store(view["id"], state)
+    with r.page() as page:
+        r.join(page, view, 0)
+        page.wait_for_selector('[data-action="hit"]')
+        page.locator('[data-action="hit"]').focus()
+        state = r.load(view["id"])
+        state["deck"] = [1]
+        r.store(view["id"], state)
+        page.wait_for_function("() => document.querySelector('#dock-deck').textContent === 'Deck: 1'")
+        assert (
+            page.evaluate(
+                "() => document.activeElement && document.activeElement.getAttribute('data-action')"
+            )
+            == "hit"
+        )
+
+
+def test_spectator_has_no_invite_button(r: Runner) -> None:
+    view = r.create(("Ann", "Bob"))
+    state = r.clean(view["id"])
+    state.update(round_over=True, winner=0, last_round=LAST_ROUND)
+    state["players"][0]["total"] = 210
+    r.store(view["id"], state)
+    with r.page() as page:
+        page.goto(r.base_url + "/?game=" + view["id"])
+        r.ready(page)
+        page.wait_for_selector("#winner-banner:not([hidden])")
+        assert page.locator('[data-action="invite"]').count() == 0
+
+
 def run_tests(runner: Runner) -> list[tuple[str, Exception]]:
     tests = [
         (name, func)

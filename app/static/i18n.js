@@ -19,9 +19,6 @@
     "nav.newGame": "New game",
     "loading.title": "Loading game …",
     "setup.starting": "Starting …",
-    "leave.newGame": "Start a new game",
-    "language.en": "English",
-    "language.de": "German",
 
     "setup.title": "New game",
     "table.aria": "Game table",
@@ -39,6 +36,7 @@
     "setup.errorEmpty": "Enter at least two players.",
     "setup.errorTooMany": "At most 6 players including the bot.",
     "setup.errorName": "Each name must be 1 to 20 characters.",
+    "setup.errorDuplicate": "Each player needs a different name.",
 
     "dock.round": "Round {round}",
     "dock.deck": "Deck: {count}",
@@ -57,12 +55,12 @@
     "table.second": "Second Chance ready",
     "table.you": "you",
     "table.dealHint": "Opening deal: every player starts with one face-up card.",
+    "table.cardHint": "Tap a card to see what it does.",
     "card.label": "Card: {card}",
     "cardName.freeze": "Freeze",
     "cardName.flip3": "Flip Three",
     "cardName.second": "Second Chance",
     "table.target": "target",
-    "status.active": "active",
     "status.frozen": "frozen",
     "status.stayed": "stayed",
     "status.bust": "bust",
@@ -98,7 +96,6 @@
     "connection.waking": "Waking up the table — the first request can take a minute …",
     "action.tryAgain": "Try again",
     "storage.unavailable": "Browser storage is blocked — invites and settings last only until this tab closes.",
-    "toast.closed": "Close",
 
     "invite.title": "Invite players",
     "invite.intro": "Send each link to its player. Anyone with the link can play that seat — do not post it publicly.",
@@ -130,6 +127,7 @@
     "rules.round": "When everyone is finished, round scores are added to totals. Anyone at the table can start the next round.",
     "rules.winTitle": "Winning",
     "rules.win": "First to 200+ points and sole leader wins. A tie at 200+ plays another round.",
+    "rules.keys": "Shortcuts: H = hit, S = stay, 1–6 = pick a target, ? = rules, Esc = close a dialog.",
     "card.title": "Card explanation",
     "card.number": "A number adds its value to your score. Drawing it twice busts you unless you have a Second Chance.",
     "card.plus": "+N adds N points to your round score right away.",
@@ -155,6 +153,7 @@
     "error.gameNotFound": "game not found",
     "error.staleWrite": "game changed in the meantime, reload and try again",
     "error.badNames": "each name must be 1 to 20 characters after trimming",
+    "error.unknown": "Something went wrong — please try again.",
     "error.invalidRequest": "invalid request"
   });
 
@@ -172,9 +171,6 @@
     "nav.newGame": "Neues Spiel",
     "loading.title": "Spiel wird geladen …",
     "setup.starting": "Startet …",
-    "leave.newGame": "Neues Spiel starten",
-    "language.en": "Englisch",
-    "language.de": "Deutsch",
 
     "setup.title": "Neues Spiel",
     "table.aria": "Spieltisch",
@@ -192,6 +188,7 @@
     "setup.errorEmpty": "Gib mindestens zwei Spieler ein.",
     "setup.errorTooMany": "Maximal 6 Spieler inklusive Bot.",
     "setup.errorName": "Jeder Name muss 1 bis 20 Zeichen lang sein.",
+    "setup.errorDuplicate": "Jeder Spieler braucht einen anderen Namen.",
 
     "dock.round": "Runde {round}",
     "dock.deck": "Stapel: {count}",
@@ -210,12 +207,12 @@
     "table.second": "Second Chance bereit",
     "table.you": "du",
     "table.dealHint": "Erstverteilung: Jeder Spieler beginnt mit einer offenen Karte.",
+    "table.cardHint": "Tippe auf eine Karte, um sie zu erklären.",
     "card.label": "Karte: {card}",
     "cardName.freeze": "Freeze",
     "cardName.flip3": "Flip Three",
     "cardName.second": "Second Chance",
     "table.target": "Ziel",
-    "status.active": "aktiv",
     "status.frozen": "eingefroren",
     "status.stayed": "ausgestiegen",
     "status.bust": "verzockt",
@@ -251,7 +248,6 @@
     "connection.waking": "Der Tisch wird geweckt — die erste Anfrage kann eine Minute dauern …",
     "action.tryAgain": "Erneut versuchen",
     "storage.unavailable": "Browser-Speicher blockiert — Einladungen und Einstellungen gelten nur bis zum Schließen dieses Tabs.",
-    "toast.closed": "Schließen",
 
     "invite.title": "Spieler einladen",
     "invite.intro": "Sende jeden Link an die richtige Person. Wer den Link hat, kann diesen Platz spielen — teile ihn nicht öffentlich.",
@@ -283,6 +279,7 @@
     "rules.round": "Wenn alle fertig sind, kommen die Rundenpunkte zu den Gesamtpunkten. Jeder am Tisch kann die nächste Runde starten.",
     "rules.winTitle": "Gewinnen",
     "rules.win": "Wer zuerst 200+ Punkte hat und allein führt, gewinnt. Bei Gleichstand ab 200 gibt es eine weitere Runde.",
+    "rules.keys": "Tastenkürzel: H = Noch eine, S = Stopp, 1–6 = Ziel wählen, ? = Regeln, Esc = Dialog schließen.",
     "card.title": "Kartenerklärung",
     "card.number": "Eine Zahlenkarte addiert ihren Wert zu deinen Punkten. Ziehst du sie doppelt, bist du verzockt — außer mit Second Chance.",
     "card.plus": "+N-Bonuskarte addiert sofort N Punkte zu deinen Rundenpunkten.",
@@ -308,6 +305,7 @@
     "error.gameNotFound": "Spiel nicht gefunden",
     "error.staleWrite": "das Spiel hat sich inzwischen geändert — neu laden und erneut versuchen",
     "error.badNames": "jeder Name muss nach dem Trimmen 1 bis 20 Zeichen lang sein",
+    "error.unknown": "Etwas ist schiefgelaufen — bitte erneut versuchen.",
     "error.invalidRequest": "ungültige Anfrage"
   });
 

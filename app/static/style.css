@@ -19,13 +19,13 @@
   --green: #9ee37d;
   --violet: #c4a6f5;
   --bust: #ff9d9d;
-  --stayed: #8ee6f0;
+  --stayed: #cbd9e6; /* distinct from cyan number cards / summary */
   --frozen: #9fd0ff;
   --shadow-offset: 5px;
   --border-width: 3px;
   --dock-height: 200px;
   color-scheme: light;
-  font-family: "Courier New", ui-monospace, monospace;
+  font-family: "Courier New", "Liberation Mono", "DejaVu Sans Mono", ui-monospace, monospace;
   color: var(--ink);
   background: var(--paper);
 }
@@ -84,13 +84,15 @@ body {
   background-color: var(--paper);
   background-image: radial-gradient(var(--dot) 1px, transparent 1px);
   background-size: 16px 16px;
-  font-family: "Courier New", ui-monospace, monospace;
+  font-family: "Courier New", "Liberation Mono", "DejaVu Sans Mono", ui-monospace, monospace;
   font-size: 15px;
   line-height: 1.45;
 }
 
 h1, h2, h3, .wordmark, .winner-title {
-  font-family: "Arial Black", "Helvetica Neue", sans-serif;
+  /* "Arial Black" is absent on Linux/Android: keep the heavy look via weight. */
+  font-family: "Arial Black", "Arial Bold", "Helvetica Neue", system-ui, sans-serif;
+  font-weight: 900;
   letter-spacing: 0.02em;
 }
 
@@ -215,6 +217,7 @@ body.is-loading { overflow: hidden; }
   cursor: pointer;
 }
 
+.icon-btn.is-muted { text-decoration: line-through; opacity: 0.65; }
 .icon-btn:hover { transform: translate(-1px, -1px); box-shadow: 4px 4px 0 var(--edge-shadow); }
 .icon-btn:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--edge-shadow); }
 
@@ -326,7 +329,8 @@ body.is-loading { overflow: hidden; }
   border-color: #111;
   box-shadow: var(--shadow-offset) var(--shadow-offset) 0 #111;
 }
-.player-card.is-mine { outline: 3px dashed var(--ink); outline-offset: 3px; }
+/* Solid = "your seat"; dashed is reserved for the keyboard focus ring. */
+.player-card.is-mine { outline: 3px solid var(--ink); outline-offset: 3px; }
 .player-card.is-target {
   /* Distinct from .is-turn (fill) and .is-mine (thin dashed ink): thick pink ring + lift. */
   outline: 4px dashed var(--pink);
@@ -338,10 +342,10 @@ body.is-loading { overflow: hidden; }
 .player-card.is-turn :focus-visible,
 .player-card.is-turn:focus-visible { outline-color: #111; }
 
-.player-name { font-family: "Arial Black", sans-serif; font-size: 17px; margin: 0 0 6px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.player-name { font-family: "Arial Black", "Arial Bold", system-ui, sans-serif; font-weight: 900; font-size: 17px; margin: 0 0 6px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .turn-marker { color: #111; }
 .you-tag {
-  font-family: "Courier New", monospace;
+  font-family: "Courier New", "Liberation Mono", ui-monospace, monospace;
   font-size: 11px;
   text-transform: uppercase;
   padding: 2px 6px;
@@ -352,6 +356,11 @@ body.is-loading { overflow: hidden; }
 
 .player-line { font-size: 13px; margin: 3px 0; }
 .player-line strong { font-weight: bold; }
+/* Round points are the number you act on; the running total is context. */
+.player-score { font-size: 22px; font-weight: 900; line-height: 1.1; margin: 4px 0 0; }
+.player-total { font-size: 12px; color: var(--muted); margin: 0 0 4px; }
+.player-card.is-turn .player-total { color: #111; opacity: 0.75; }
+.cards-hint { margin: 4px 0 0; font-size: 12px; color: var(--muted); }
 
 /* A reserved row keeps badges from growing the card when they appear. */
 .player-status { min-height: 32px; margin-top: 4px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
@@ -506,11 +515,16 @@ body.is-loading { overflow: hidden; }
 .dock-prompt { margin: 8px 0; font-size: 16px; font-weight: bold; min-height: 2.4em; text-align: center; }
 .dock-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; align-content: flex-start; flex: 1; overflow-y: auto; text-align: center; }
 .waiting-bar { height: 8px; flex: none; margin: 8px -16px 0; background: var(--paper); border-top: 2px solid var(--line); }
-.waiting-fill { display: block; height: 100%; width: 0; background: var(--green); transition: width 0.2s linear; }
-.waiting-fill.w-none { width: 0; }
-.waiting-fill.w-wait { width: 35%; }
-.waiting-fill.w-think { width: 70%; background: var(--violet); }
-.waiting-fill.w-ready { width: 100%; }
+/* Indeterminate, not a fake percentage: a segment slides while we wait. */
+.waiting-fill { display: block; height: 100%; width: 45%; background: var(--green); transform: translateX(-100%); }
+.waiting-fill.w-none { animation: none; transform: translateX(-100%); }
+.waiting-fill.w-wait { animation: wait-slide 1.4s ease-in-out infinite; }
+.waiting-fill.w-think { background: var(--violet); animation: wait-slide 1.8s ease-in-out infinite; }
+.waiting-fill.w-ready { animation: none; transform: translateX(0); width: 100%; }
+@keyframes wait-slide {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(320%); }
+}
 
 /* On the setup screen the dock only holds the start button: do not reserve 200px. */
 body.is-setup { padding-bottom: 110px; }
@@ -660,6 +674,9 @@ body.is-setup .dock { height: auto; min-height: 0; padding-bottom: 12px; }
   .player-card { min-height: 0; padding: 6px; }
   .player-name { font-size: 14px; margin-bottom: 0; }
   .player-line { font-size: 11px; margin: 0; }
+  .player-score { font-size: 15px; margin: 0; }
+  .player-total { margin: 0; }
+  .cards-hint { display: none; }
   .progress { margin: 2px 0; }
   .player-status { min-height: 12px; margin-top: 2px; }
   .cards { min-height: 30px; margin-top: 2px; gap: 3px; }
@@ -668,4 +685,5 @@ body.is-setup .dock { height: auto; min-height: 0; padding-bottom: 12px; }
 
 @media (prefers-reduced-motion: reduce) {
   .card.card-deal { animation: none; }
+  .waiting-fill.w-wait, .waiting-fill.w-think { animation: none; transform: translateX(0); }
 }

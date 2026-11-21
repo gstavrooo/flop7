@@ -30,7 +30,8 @@
   function translateError(detail) {
     if (!detail) return t("error.network");
     const key = ERROR_KEYS[String(detail)];
-    return key ? t(key) : String(detail);
+    // Unknown server details are internal text, not player-facing copy.
+    return key ? t(key) : t("error.unknown");
   }
 
   // ---- state ----
@@ -66,6 +67,8 @@
   let dockSignature = "";
   let inviteSignature = "";
   let eventTimer = null;
+  let setupErrorKey = null;
+  let newCardTimer = null;
   let lastTurnSeat = null;
 
   const $ = function (id) { return document.getElementById(id); };
@@ -109,12 +112,14 @@
     toastTimer = setTimeout(function () { els.toast.hidden = true; }, retryFn ? 8000 : 3500);
   }
 
-  function setSetupError(message) {
+  function setSetupError(message, key) {
+    setupErrorKey = key || null;
     els.setupError.textContent = message;
     els.setupError.hidden = false;
   }
 
   function clearSetupError() {
+    setupErrorKey = null;
     els.setupError.textContent = "";
     els.setupError.hidden = true;
   }
@@ -322,6 +327,7 @@
       lastSeatCards = null;
       cardDealAt = {};
       newCardUntil = {};
+      if (newCardTimer) { clearTimeout(newCardTimer); newCardTimer = null; }
       lastTurnSeat = null;
       dockSignature = "";
       inviteSignature = "";
@@ -381,6 +387,7 @@
 
   function render() {
     I18n.apply(document);
+    if (setupErrorKey) els.setupError.textContent = t(setupErrorKey);
     els.storageHint.hidden = Storage.available();
     const inGame = game !== null;
     els.loadingScreen.hidden = !loading;
@@ -425,7 +432,9 @@
     els.btnTheme.setAttribute("aria-label", themeLabel);
     els.btnTheme.setAttribute("title", themeLabel);
     const soundLabel = t(soundOn ? "nav.soundOn" : "nav.soundOff");
-    els.btnSound.textContent = soundOn ? "🔊" : "🔇";
+    // One monochrome glyph set for all toolbar buttons; muting is shown by the
+    // struck-through note, not by switching to a coloured emoji.
+    els.btnSound.classList.toggle("is-muted", !soundOn);
     els.btnSound.setAttribute("aria-pressed", soundOn ? "true" : "false");
     els.btnSound.setAttribute("aria-label", soundLabel);
     els.btnSound.setAttribute("title", soundLabel);
@@ -497,6 +506,17 @@
     Object.keys(newCardUntil).forEach(function (key) {
       if (newCardUntil[key] < now) delete newCardUntil[key];
     });
+    // The "new card" label must expire even when nothing else re-renders.
+    if (newCardTimer) { clearTimeout(newCardTimer); newCardTimer = null; }
+    const nextExpiry = Math.min.apply(null, Object.keys(newCardUntil).map(function (key) {
+      return newCardUntil[key];
+    }));
+    if (isFinite(nextExpiry)) {
+      newCardTimer = setTimeout(function () {
+        newCardTimer = null;
+        if (game) renderPlayers();
+      }, Math.max(0, nextExpiry - Date.now()) + 50);
+    }
 
     game.players.forEach(function (player, seat) {
       const card = el("div", "player-card");
@@ -515,11 +535,14 @@
       if (!hotseat && seat === mySeat) name.appendChild(el("span", "you-tag", t("table.you")));
       card.appendChild(name);
 
-      card.appendChild(el("p", "player-line", t("table.total", { total: player.total })));
-      card.appendChild(el("p", "player-line", t("table.score", { score: player.score })));
-      card.appendChild(el("p", "player-line", t("table.numbers", { count: player.numbers.length })));
+      // Round score is the hero number; the total is context. The 7-step bar
+      // already shows the unique-number count, so the redundant text is gone.
+      card.appendChild(el("p", "player-line player-score", t("table.score", { score: player.score })));
+      card.appendChild(el("p", "player-line player-total", t("table.total", { total: player.total })));
 
       const progress = el("div", "progress");
+      progress.setAttribute("role", "img");
+      progress.setAttribute("aria-label", t("table.numbers", { count: player.numbers.length }));
       for (let i = 0; i < 7; i += 1) {
         progress.appendChild(el("span", "progress-step" + (i < player.numbers.length ? " filled" : "")));
       }
@@ -792,6 +815,11 @@
     if (names.length + Number(withBot) > 6) { setSetupError(t("setup.errorTooMany")); return; }
     if (names.some(function (n) { return n.length < 1 || n.length > 20; })) {
       setSetupError(t("setup.errorName"));
+      return;
+    }
+    const seats = withBot ? names.concat(["Bot"]) : names;
+    if (new Set(seats).size !== seats.length) {
+      setSetupError(t("setup.errorDuplicate"), "setup.errorDuplicate");
       return;
     }
     clearSetupError();

@@ -1229,14 +1229,21 @@ def test_event_line_shows_translated_action(r: Runner) -> None:
 
 
 def test_hotseat_prompt_names_the_current_player(r: Runner) -> None:
+    view = r.create(("Ann", "Bob"))
+    token = view["seats"][0]["token"]
     with r.page() as page:
         page.goto(r.base_url + "/")
         r.ready(page)
-        page.locator("#names").fill("Ann, Bob")
-        page.locator("#btn-start").click()
-        page.wait_for_selector("#table-screen:not([hidden])")
-        if page.locator("#invite-dialog[open]").count():
-            page.locator("#invite-close").click()
+        page.evaluate(
+            """(args) => {
+              localStorage.setItem('flop7:v1:game:' + args.id, JSON.stringify({
+                value: { tokens: {0: args.token}, mySeat: 0, hotseat: true, invites: [] }
+              }));
+            }""",
+            {"id": view["id"], "token": token},
+        )
+        page.goto(r.base_url + "/?game=" + view["id"])
+        r.ready(page)
         page.wait_for_selector('[data-action="hit"]')
         assert "Ann" in page.locator("#dock-prompt").inner_text()
 

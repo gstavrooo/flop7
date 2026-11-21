@@ -515,7 +515,6 @@ body.is-loading { overflow: hidden; }
 /* On the setup screen the dock only holds the start button: do not reserve 200px. */
 body.is-setup { padding-bottom: 110px; }
 body.is-setup .dock { height: auto; min-height: 0; padding-bottom: 12px; }
-body.is-setup .dock .waiting-bar { display: none; }
 
 /* ---------- toast + connection chip (6.6) ---------- */
 .toast {

@@ -1106,7 +1106,7 @@ def test_topbar_icon_labels_and_sound_pressed(r: Runner) -> None:
             button = page.locator(selector)
             assert button.get_attribute("aria-label")
             assert button.get_attribute("title")
-            assert button.inner_text().strip() in {"❓", "🌐", "🔊", "🔇", "◐", "☀", "☾"}
+            assert button.inner_text().strip() in {"?", "文", "♪", "◐", "☀", "☾", "↺"}
         backgrounds = page.evaluate(
             """() => ['#btn-rules', '#btn-language', '#btn-sound', '#btn-theme']
                  .map(s => getComputedStyle(document.querySelector(s)).backgroundColor)"""
@@ -1315,6 +1315,120 @@ def test_spectator_has_no_invite_button(r: Runner) -> None:
         r.ready(page)
         page.wait_for_selector("#winner-banner:not([hidden])")
         assert page.locator('[data-action="invite"]').count() == 0
+
+
+def test_rules_document_keyboard_shortcuts(r: Runner) -> None:
+    with r.page() as page:
+        page.goto(r.base_url + "/")
+        r.ready(page)
+        page.keyboard.press("?")
+        page.wait_for_selector("#rules-dialog[open]")
+        hint = page.locator("#rules-dialog .dialog-hint")
+        assert "H" in hint.inner_text() and "S" in hint.inner_text(), hint.inner_text()
+        page.evaluate("() => Flop7I18n.setLanguage('de')")
+        assert "Noch eine" in hint.inner_text(), hint.inner_text()
+        page.keyboard.press("Escape")
+
+
+def test_card_hint_and_progress_have_accessible_labels(r: Runner) -> None:
+    view = r.create(("Ann", "Bob"))
+    r.store(view["id"], r.clean(view["id"]))
+    with r.page() as page:
+        r.join(page, view, 0)
+        page.wait_for_selector(".player-card .progress")
+        assert "Tap a card" in page.locator(".cards-hint").inner_text()
+        progress = page.locator(".player-card").first.locator(".progress")
+        assert "0 / 7 unique numbers" == progress.get_attribute("aria-label")
+        page.evaluate("() => Flop7I18n.setLanguage('de')")
+        assert "Tippe auf eine Karte" in page.locator(".cards-hint").inner_text()
+        assert "verschiedene Zahlenkarten" in progress.get_attribute("aria-label")
+
+
+def test_duplicate_names_are_rejected(r: Runner) -> None:
+    with r.page() as page:
+        page.goto(r.base_url + "/")
+        r.ready(page)
+        page.locator("#names").fill("Ann, Ann")
+        page.locator("#btn-start").click()
+        error = page.locator("#setup-error")
+        page.wait_for_selector("#setup-error:not([hidden])")
+        assert "different name" in error.inner_text(), error.inner_text()
+        assert page.locator("#setup-screen").is_visible()
+        page.evaluate("() => Flop7I18n.setLanguage('de')")
+        assert "anderen Namen" in error.inner_text(), error.inner_text()
+
+
+def test_unknown_api_error_is_not_leaked(r: Runner) -> None:
+    with r.page() as page:
+
+        def unknown_error(route: Any) -> None:
+            route.fulfill(
+                status=400,
+                content_type="application/json",
+                body=json.dumps({"detail": "internal-secret-token"}),
+            )
+
+        page.route("**/api/games", unknown_error)
+        page.goto(r.base_url + "/")
+        r.ready(page)
+        page.locator("#names").fill("Ann, Bob")
+        page.locator("#btn-start").click()
+        error = page.locator("#setup-error")
+        page.wait_for_selector("#setup-error:not([hidden])")
+        assert "internal-secret-token" not in error.inner_text()
+        assert "Something went wrong" in error.inner_text(), error.inner_text()
+
+
+def test_new_card_label_expires_without_a_rerender(r: Runner) -> None:
+    view = r.create(("Ann", "Bob"))
+    state = r.clean(view["id"])
+    state["players"][0]["numbers"] = [5]
+    state["deck"] = [6]
+    r.store(view["id"], state)
+    with r.page() as page:
+        r.join(page, view, 0)
+        page.wait_for_selector('[data-action="hit"]')
+        page.locator('[data-action="hit"]').click()
+        page.wait_for_function(
+            "() => [...document.querySelectorAll('.player-card:first-child .card')]"
+            ".map(c => c.getAttribute('aria-label')).join('|') === 'Card: 5|New card: 6'"
+        )
+        page.wait_for_function(
+            "() => [...document.querySelectorAll('.player-card:first-child .card')]"
+            ".map(c => c.getAttribute('aria-label')).join('|') === 'Card: 5|Card: 6'",
+            timeout=6000,
+        )
+
+
+def test_waiting_bar_is_indeterminate(r: Runner) -> None:
+    view = r.create(("Ann", "Bob"))
+    state = r.clean(view["id"])
+    state["turn"] = 1
+    r.store(view["id"], state)
+    with r.page() as page:
+        r.join(page, view, 0)
+        page.wait_for_function("() => !document.querySelector('#dock .btn-hit')")
+        info = page.evaluate(
+            """() => {
+              const fill = document.querySelector('#waiting-fill');
+              const style = getComputedStyle(fill);
+              return { animation: style.animationName, width: fill.getBoundingClientRect().width,
+                       barWidth: fill.parentElement.getBoundingClientRect().width };
+            }"""
+        )
+        assert info["animation"] == "wait-slide", info
+        assert 0 < info["width"] < info["barWidth"], info
+
+
+def test_manifest_and_share_metadata_are_linked(r: Runner) -> None:
+    with r.page() as page:
+        page.goto(r.base_url + "/")
+        r.ready(page)
+        assert page.locator('link[rel="manifest"]').get_attribute("href") == "/static/manifest.json"
+        assert "push your luck" in page.locator('meta[name="description"]').get_attribute("content")
+        assert page.locator('meta[property="og:title"]').get_attribute("content") == "Flop7"
+        status, manifest = r.api("GET", "/static/manifest.json")
+        assert status == 200 and manifest["short_name"] == "Flop7"
 
 
 def run_tests(runner: Runner) -> list[tuple[str, Exception]]:

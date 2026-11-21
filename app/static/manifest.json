@@ -1,0 +1,17 @@
+{
+  "name": "Flop7",
+  "short_name": "Flop7",
+  "description": "Push your luck: hit, stay, win — a shared card game for 2 to 6 players.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f4f1e8",
+  "theme_color": "#f4f1e8",
+  "icons": [
+    {
+      "src": "/static/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

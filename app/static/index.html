@@ -10,6 +10,11 @@
     <script src="/static/theme.js"></script>
   </head>
   <body>
+    <a id="skip-link" class="skip-link" href="#dock" data-i18n="nav.skipToControls"></a>
+    <div id="loading-screen" class="loading-screen" role="status" hidden>
+      <span class="spinner" aria-hidden="true"></span>
+      <p id="loading-text" class="loading-text" data-i18n="loading.title"></p>
+    </div>
     <header class="topbar">
       <div class="brand">
         <span class="wordmark">FLOP7</span>
@@ -20,6 +25,7 @@
         <button id="btn-language" class="icon-btn" type="button" data-i18n-aria="nav.language" aria-label="Language" data-i18n-title="nav.language" title="Language">🌐</button>
         <button id="btn-sound" class="icon-btn" type="button" data-i18n-aria="nav.soundOn" aria-label="Sound on" aria-pressed="true" data-i18n-title="nav.soundOn" title="Sound on">🔊</button>
         <button id="btn-theme" class="icon-btn" type="button" data-i18n-aria="nav.themeAuto" aria-label="Theme: automatic" data-i18n-title="nav.themeAuto" title="Theme: automatic">◐</button>
+        <button id="btn-new-game" class="icon-btn" type="button" data-i18n-aria="nav.newGame" aria-label="New game" data-i18n-title="nav.newGame" title="New game" hidden>↺</button>
       </nav>
     </header>
 
@@ -40,7 +46,7 @@
             </div>
           </div>
 
-          <p id="participant-preview" class="participant-preview" aria-live="polite"></p>
+          <p id="participant-preview" class="participant-preview"></p>
 
           <div class="checks">
             <label class="check"><input id="hotseat" type="checkbox" checked> <span data-i18n="setup.hotseat"></span></label>
@@ -52,6 +58,8 @@
       </section>
 
       <section id="table-screen" class="screen table-screen" hidden data-i18n-aria="table.aria" aria-label="Game table">
+        <h1 class="visually-hidden" data-i18n="table.title"></h1>
+        <div id="tie-banner" class="tie-banner" role="status" hidden></div>
         <div id="winner-banner" class="winner-banner" role="status" hidden>
           <span id="winner-title" class="winner-title"></span>
           <span id="winner-margin" class="winner-margin"></span>
@@ -72,6 +80,7 @@
         <span id="dock-round" class="dock-round"></span>
         <span id="dock-deck" class="dock-deck" aria-live="polite"></span>
       </div>
+      <p id="dock-event" class="dock-event" aria-live="polite"></p>
       <p id="dock-prompt" class="dock-prompt" aria-live="polite"></p>
       <div id="dock-actions" class="dock-actions"></div>
       <div class="waiting-bar" aria-hidden="true"><span id="waiting-fill" class="waiting-fill"></span></div>
@@ -84,8 +93,8 @@
     <div id="wake-banner" class="wake-banner" role="status" hidden data-i18n="connection.waking"></div>
     <div id="connection-chip" class="connection-chip" role="status" hidden data-i18n="connection.lost"></div>
 
-    <dialog id="invite-dialog" class="dialog">
-      <h2 class="dialog-title" data-i18n="invite.title"></h2>
+    <dialog id="invite-dialog" class="dialog" aria-labelledby="invite-title">
+      <h2 id="invite-title" class="dialog-title" data-i18n="invite.title"></h2>
       <p class="dialog-hint" data-i18n="invite.intro"></p>
       <p id="invite-feedback" class="invite-feedback" role="status" aria-live="polite"></p>
       <div id="invite-list" class="invite-list"></div>
@@ -94,8 +103,8 @@
       </div>
     </dialog>
 
-    <dialog id="rules-dialog" class="dialog">
-      <h2 class="dialog-title" data-i18n="rules.title"></h2>
+    <dialog id="rules-dialog" class="dialog" aria-labelledby="rules-title">
+      <h2 id="rules-title" class="dialog-title" data-i18n="rules.title"></h2>
       <ol class="rules-list">
         <li><strong data-i18n="rules.turnTitle"></strong> <span data-i18n="rules.turn"></span></li>
         <li><strong data-i18n="rules.duplicateTitle"></strong> <span data-i18n="rules.duplicate"></span></li>
@@ -111,8 +120,8 @@
       </div>
     </dialog>
 
-    <dialog id="card-dialog" class="dialog">
-      <h2 class="dialog-title" data-i18n="card.title"></h2>
+    <dialog id="card-dialog" class="dialog" aria-labelledby="card-title">
+      <h2 id="card-title" class="dialog-title" data-i18n="card.title"></h2>
       <p id="card-explanation" class="dialog-body"></p>
       <div class="dialog-actions">
         <button class="btn dialog-close" type="button" data-i18n="invite.close"></button>

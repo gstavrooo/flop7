@@ -71,6 +71,7 @@ def new_game(names: Sequence[str], *, bot: bool = False, rng: Any) -> State:
             "numbers": [],
             "mods": [],
             "second": False,
+            "frozen": False,
             "status": "active",
             "round_score": 0,
             "round_flop7": False,
@@ -270,6 +271,7 @@ def _apply_pending(state: State, pending: dict[str, Any], rng: Any) -> None:
     target = pending["target"]
     if kind == "freeze":
         _bank(state, target)
+        state["players"][target]["frozen"] = True
         _emit(state, "freezes", by=by, target=target)
         if target == state["turn"]:
             _advance_turn(state, target)
@@ -408,6 +410,7 @@ def next_round(state: State) -> State:
         player["numbers"] = []
         player["mods"] = []
         player["second"] = False
+        player["frozen"] = False
         player["status"] = "active"
         player["round_score"] = 0
         player["round_flop7"] = False

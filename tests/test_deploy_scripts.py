@@ -264,6 +264,6 @@ def test_alwaysdata_workflow_is_dispatch_only() -> None:
 def test_render_deploy_steps_are_paused_but_kept() -> None:
     """Render deployment is paused without deleting its setup."""
     workflow = (SCRIPTS.parent / ".github/workflows/deploy.yml").read_text(encoding="utf-8")
-    assert workflow.count("if: false # Render deployment paused") == 4
+    assert workflow.count("vars.RENDER_DEPLOY_ENABLED == 'true'") == 4
     assert (SCRIPTS / "render_deploy.py").is_file()
     assert "RENDER_API_KEY" in workflow

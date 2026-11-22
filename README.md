@@ -180,11 +180,12 @@ The repo has a read-only GitHub deploy key for remote pulls; the CI SSH key is s
 
 The former host <https://flop7-01ed.onrender.com> is no longer deployed to. The GHCR push, Render
 deploy, public smoke and image-prune steps in
-[`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) are disabled with `if: false`; the
-build and image-test steps still run on pushes to `main`. The Render service,
-`scripts/render_deploy.py` and the `RENDER_*` secrets/variables are deliberately kept so the setup
-can be reactivated without rebuilding it. The old Render instance may still answer with its last
-deployed snapshot, but it receives no updates and its ephemeral DB is unrelated to the live data.
+[`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) are guarded by the repository
+variable `RENDER_DEPLOY_ENABLED` (currently `false`); the build and image-test steps still run on
+pushes to `main`. The Render service, `scripts/render_deploy.py` and the `RENDER_*` secrets/variables
+are deliberately kept so setting that variable to `true` reactivates the setup without rebuilding
+it. The old Render instance may still answer with its last deployed snapshot, but it receives no
+updates and its ephemeral DB is unrelated to the live data.
 
 One-time prerequisites for the current host:
 

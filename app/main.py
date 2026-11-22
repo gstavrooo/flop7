@@ -13,17 +13,19 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, Header, HTTPException, Query
+from fastapi import FastAPI, Header, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from sqlalchemy import insert, select, update
 from sqlalchemy.exc import OperationalError
+from starlette.background import BackgroundTask
 
 from app import engine as rules
 from app.db import create_db_engine, games, get_database_url, moves, seats
 from app.migrate import apply_migrations
+from app.ratelimit import RateLimiter
 from app.security import (
     BAD_NAMES,
     GAME_NOT_FOUND,
@@ -40,6 +42,8 @@ STATIC_DIR = Path(__file__).resolve().parent / "static"
 BOT_DELAY_SECONDS = 1.5
 SSE_POLL_SECONDS = 1.0
 MAX_SSE_SECONDS = 55
+RATE_LIMITED = "rate limit exceeded; try again shortly"
+CREATE_WINDOW_SECONDS = 60.0
 # One global lock: every process still relies on the version-guarded UPDATE, but
 # threads in this process must not race to be the one that commits a bot decision.
 _BOT_LOCK = threading.Lock()
@@ -63,6 +67,14 @@ def _now() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
 
 
+def client_key(request: Request) -> str:
+    """The visitor's IP; uvicorn's proxy headers keep this from being the proxy itself."""
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",", 1)[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
 def _state_view(state: dict[str, Any], game_id: str, version: int) -> dict[str, Any]:
     """Public view (spec 2.5) plus the id and version needed by clients."""
     view = rules.public_view(state)
@@ -76,6 +88,7 @@ def create_app(
     database_url: str | None = None,
     rng: Any | None = None,
     migrate_on_start: bool | None = None,
+    rate_limiter: RateLimiter | None = None,
 ) -> FastAPI:
     """Application factory; tests inject a temporary database and a deterministic rng."""
     url = database_url or get_database_url()
@@ -84,6 +97,9 @@ def create_app(
     )
     db_engine = create_db_engine(url)
     bot_rng = rng if rng is not None else random.SystemRandom()
+    limiter = rate_limiter if rate_limiter is not None else RateLimiter()
+    create_limit = int(os.environ.get("RATE_CREATE_PER_MIN", "30"))
+    sse_limit = int(os.environ.get("RATE_SSE_MAX_PER_IP", "10"))
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
@@ -97,7 +113,17 @@ def create_app(
 
     @app.middleware("http")
     async def harden_headers(request, call_next):
-        response = await call_next(request)
+        retry_after = None
+        if create_limit > 0 and request.method == "POST" and request.url.path == "/api/games":
+            retry_after = limiter.check(client_key(request), create_limit, CREATE_WINDOW_SECONDS)
+        if retry_after is not None:
+            response = JSONResponse(
+                status_code=429,
+                content={"detail": RATE_LIMITED},
+                headers={"Retry-After": str(retry_after)},
+            )
+        else:
+            response = await call_next(request)
         for name, value in SECURITY_HEADERS.items():
             response.headers[name] = value
         path = request.url.path
@@ -298,12 +324,20 @@ def create_app(
 
     @app.get("/api/games/{game_id}/events")
     async def events(
+        request: Request,
         game_id: str,
         seconds: int = Query(default=MAX_SSE_SECONDS, ge=0, le=MAX_SSE_SECONDS),
     ) -> StreamingResponse:
         with db_engine.connect() as connection:
             if load_row(connection, game_id) is None:
                 raise HTTPException(status_code=404, detail=GAME_NOT_FOUND)
+
+        key = client_key(request)
+        acquired = False
+        if sse_limit > 0:
+            acquired = limiter.acquire_slot(key, sse_limit)
+            if not acquired:
+                raise HTTPException(status_code=429, detail=RATE_LIMITED)
 
         async def stream():
             last_version = None
@@ -335,6 +369,7 @@ def create_app(
             stream(),
             media_type="text/event-stream",
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+            background=BackgroundTask(limiter.release_slot, key) if acquired else None,
         )
 
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")

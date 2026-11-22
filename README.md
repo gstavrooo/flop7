@@ -228,6 +228,9 @@ gitleaks detect --source=. --config=gitleaks.toml --no-banner   # full history (
 - All responses carry locked-down headers (`X-Content-Type-Options`, `Referrer-Policy`, strict CSP,
   frame-busting); HTML and static assets use revalidation so deploys appear without a hard reload.
 - No login and no privileged endpoints: knowing a game id only reveals that game's public view.
+- In-process rate limits per visitor IP: 30 game creations/minute and 10 concurrent SSE streams by
+  default (`RATE_CREATE_PER_MIN` / `RATE_SSE_MAX_PER_IP`; `0` disables either). Breaches get 429 with
+  `Retry-After`. Limits are per worker and reset on restart; they are abuse guards, not quotas.
 - The SQLite file has no network exposure. The CI container runs as `nobody` with `pip` removed;
   the live host runs the same hashed runtime dependencies in a per-account venv. No secrets, keys
   or credentials live in the repo — gitleaks scans the whole history on every PR.
@@ -260,8 +263,9 @@ gitleaks detect --source=. --config=gitleaks.toml --no-banner   # full history (
   Alembic as the schema gate.
 - **Horizontal scaling:** share state via the database/cache, add advisory locks for moves, and
   keep the app stateless (it already is apart from the SQLite file).
-- **Hardening and observability:** signed, expiring invite tokens, rate limiting per id/IP,
-  structured logs and metrics/alerting; upgrade image retention to a proper registry lifecycle.
+- **Hardening and observability:** signed, expiring invite tokens, shared/per-account rate limits
+  instead of per-process counters, structured logs and metrics/alerting; upgrade image retention to a
+  proper registry lifecycle.
 
 ## Licensing
 

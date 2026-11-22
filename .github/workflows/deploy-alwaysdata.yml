@@ -1,0 +1,65 @@
+name: Deploy (alwaysdata, parallel test)
+
+# Parallel-host experiment: runs only on manual dispatch, so pushes to main keep
+# deploying to Render via deploy.yml. This workflow never touches that service.
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch or commit SHA to deploy on alwaysdata
+        required: false
+        default: deploy/alwaysdata
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-alwaysdata
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: pull, restart, smoke
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref || 'deploy/alwaysdata' }}
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.14"
+
+      - name: Pull the exact ref on alwaysdata and install hashed dependencies
+        env:
+          ALWAYS_DATA_SSH_KEY: ${{ secrets.ALWAYS_DATA_SSH_KEY }}
+          DEPLOY_REF: ${{ inputs.ref || 'deploy/alwaysdata' }}
+        run: |
+          set -eu
+          case "$DEPLOY_REF" in
+            [A-Za-z0-9._/-]*) ;;
+            *) echo "invalid ref: $DEPLOY_REF" >&2; exit 1 ;;
+          esac
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$ALWAYS_DATA_SSH_KEY" > "$HOME/.ssh/id_ed25519"
+          chmod 600 "$HOME/.ssh/id_ed25519"
+          ssh-keyscan -H ssh-gstavrooo.alwaysdata.net >> "$HOME/.ssh/known_hosts"
+          ssh -o BatchMode=yes -o IdentitiesOnly=yes -i "$HOME/.ssh/id_ed25519" \
+            gstavrooo@ssh-gstavrooo.alwaysdata.net \
+            "cd ~/flop7 && git fetch origin '$DEPLOY_REF' && git checkout --detach FETCH_HEAD && .venv/bin/python -m pip install --require-hashes -r requirements.txt"
+
+      - name: Restart the site via API and wait for health
+        id: site
+        env:
+          ALWAYS_DATA_API_KEY: ${{ secrets.ALWAYS_DATA_API_KEY }}
+          ALWAYS_DATA_ACCOUNT: ${{ vars.ALWAYS_DATA_ACCOUNT }}
+        run: python scripts/alwaysdata_deploy.py
+
+      - name: Smoke the public URL
+        env:
+          SERVICE_URL: ${{ steps.site.outputs.service_url }}
+        run: sh scripts/smoke.sh "$SERVICE_URL"

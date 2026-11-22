@@ -1464,6 +1464,10 @@ def main() -> int:
                 "DATABASE_URL": database_url,
                 "PORT": str(port),
                 "MIGRATE_ON_START": "1",
+                # The suite intentionally creates dozens of games in one minute from
+                # one IP; production limits would reject them (spec 8 browser gate).
+                "RATE_CREATE_PER_MIN": "0",
+                "RATE_SSE_MAX_PER_IP": "0",
                 "PYTHONUNBUFFERED": "1",
             }
         )

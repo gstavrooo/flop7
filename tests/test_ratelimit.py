@@ -67,6 +67,16 @@ def test_game_creation_returns_429_with_retry_after(limited_client: TestClient) 
     assert limited_client.get("/api/health").json() == {"ok": True}
 
 
+def test_zero_limits_disable_the_guards(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("RATE_CREATE_PER_MIN", "0")
+    monkeypatch.setenv("RATE_SSE_MAX_PER_IP", "0")
+    url = f"sqlite:///{tmp_path / 'flop7.db'}"
+    apply_migrations(url)
+    with TestClient(create_app(database_url=url, rng=FixedRng())) as client:
+        for _ in range(5):
+            assert client.post("/api/games", json={"players": ["A", "B"]}).status_code == 201
+
+
 def test_sse_streams_are_capped_per_client(limited_client: TestClient) -> None:
     game_id = limited_client.post("/api/games", json={"players": ["A", "B"]}).json()["id"]
     with limited_client.stream("GET", f"/api/games/{game_id}/events?seconds=2") as first:

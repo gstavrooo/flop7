@@ -1,5 +1,8 @@
 name: Deploy
 
+# Render deployment is paused: the GHCR/Render/smoke/prune steps below are
+# disabled with `if: false` but kept intact so the setup can be reactivated.
+# The live host is alwaysdata via deploy-alwaysdata.yml (manual dispatch only).
 # Spec 9.2: go-live triggers. `push` deploys every merge to main; the daily
 # 05:23 UTC schedule catches Dependabot bot merges, which fire no push event.
 on:
@@ -19,7 +22,7 @@ concurrency:
 
 jobs:
   deploy:
-    name: build, test, push, deploy, smoke
+    name: build and test image (Render deploy paused)
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
@@ -50,6 +53,7 @@ jobs:
         run: SKIP_BUILD=1 sh scripts/test-image.sh "$IMAGE"
 
       - name: Push the tested tag to GHCR
+        if: false # Render deployment paused; keep setup for reactivation
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -57,6 +61,7 @@ jobs:
           docker push "$IMAGE"
 
       - name: Create or patch Render service, deploy the exact tag, poll to live
+        if: false # Render deployment paused; keep setup for reactivation
         id: render
         env:
           RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
@@ -65,11 +70,13 @@ jobs:
         run: python scripts/render_deploy.py
 
       - name: Smoke the public URL
+        if: false # Render deployment paused; keep setup for reactivation
         env:
           SERVICE_URL: ${{ steps.render.outputs.service_url }}
         run: sh scripts/smoke.sh "$SERVICE_URL"
 
       - name: Keep only the newest 3 GHCR image versions
+        if: false # Render deployment paused; keep setup for reactivation
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python scripts/prune_ghcr.py

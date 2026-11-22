@@ -4,9 +4,10 @@ A browser-based, multi-player push-your-luck card game with live updates and per
 
 ## Status
 
-Complete and tagged `v1.0.0`; the repository is still **private**. The specification that drove the
-build (`FLOP7-SPEC.md`) and the phase prompts are kept on the owner's machine and are deliberately
-not part of this repository.
+Complete and tagged `v1.0.0`; the repository is still **private**. The live service is
+<https://gstavrooo.alwaysdata.net>; the former Render deployment is **paused** (setup retained).
+The specification that drove the build (`FLOP7-SPEC.md`) and the phase prompts are kept on the
+owner's machine and are deliberately not part of this repository.
 
 ## Product and rules
 
@@ -42,10 +43,10 @@ The deliberate adaptations are **2–6 seats instead of 3–18** and the optiona
 
 | Concern | Choice |
 | --- | --- |
-| Runtime | FastAPI, uvicorn; Python 3.15 slim in the container (digest-pinned), CI/lockfiles on 3.14 |
+| Runtime | FastAPI, uvicorn; Python 3.14 venv on the live host, 3.15 slim container (digest-pinned) for CI |
 | Frontend | Vanilla JS/CSS in `app/static/`, no build step, no npm |
 | Storage | SQLite file via SQLAlchemy Core; Alembic migrations applied on boot |
-| Hosting | Render free tier, region Frankfurt; image in GHCR, base image pinned by digest |
+| Hosting | alwaysdata free plan, one *User program* site; Render free tier paused (setup retained) |
 | Dependencies | `requirements.in` / `requirements-dev.in` compiled to hashed lockfiles with pip-tools |
 | Quality gates | pytest, Playwright browser regressions, container smoke + Trivy, ruff, shellcheck, actionlint, zizmor, gitleaks |
 
@@ -76,19 +77,16 @@ and stale clients harmless (409 → reload).
 ```mermaid
 flowchart TD
   PR["Pull request"] --> CI["CI: test · container-test · browser-test<br/>lint · gitleaks (full history)"]
-  CI -->|"all green + gh pr merge --auto --squash"| MAIN["main"]
-  MAIN -->|"push · daily 05:23 UTC · manual dispatch"| DEPLOY["Deploy job (concurrency: deploy)"]
-  DEPLOY --> BUILD["Build image tagged with full commit SHA"]
-  BUILD --> TEST["Smoke + Trivy on that exact image"]
-  TEST --> PUSH["Push tag to GHCR"]
-  PUSH --> RENDER["Render: patch image, trigger deploy, poll to live"]
-  RENDER --> SMOKE["Public URL smoke: health, UI, 403, 200, 409, SSE"]
-  SMOKE --> PRUNE["Prune old GHCR versions (keep 3 + current)"]
+  CI -->|"green gates + squash merge"| MAIN["main"]
+  MAIN -->|"push · daily 05:23 UTC · manual dispatch"| IMAGE["deploy.yml: build + test the SHA-tagged image<br/>GHCR/Render/smoke/prune steps paused"]
+  OPS["Manual dispatch of deploy-alwaysdata.yml"] --> PULL["SSH: pull chosen ref, install hashed deps"]
+  PULL --> RESTART["alwaysdata API: restart site, poll /api/health"]
+  RESTART --> SMOKE["Public URL smoke: health, UI, 403, 200, 409, SSE"]
 ```
 
-Bot merges do not fire a `push` event, so the daily schedule deploys them within 24 h; a manual
-dispatch deploys immediately. A failed public smoke leaves a red run — the fix is a new commit, never
-an automatic rollback.
+Pushes to `main` still build and test the container image; they do **not** deploy to any host.
+Going live is an explicit `workflow_dispatch` of `deploy-alwaysdata.yml` with the desired ref.
+A failed public smoke leaves a red run — the fix is a new commit, never an automatic rollback.
 
 ## Local development
 
@@ -149,11 +147,10 @@ desktop, no screenshots/traces), `lint` (ruff, shellcheck, actionlint, zizmor of
 `gitleaks` (whole history). All actions and tool images are pinned by SHA/digest.
 
 Branches are trunk-based: squash-merge only, linear history, no direct pushes to `main`. PRs are
-merged with `gh pr merge <nr> --auto --squash`. This free private-tier repository has
-`allow_auto_merge: false` and cannot require status checks, so that request **completes as an
-immediate squash merge** rather than waiting for gates. The PR still runs all five gates; confirm
-they are green after merging (or watch the follow-up checks). Green checks never replace reading
-the diff.
+merged with `gh pr merge <nr> --auto --squash`. GitHub does not always accept `--auto` in this free
+private-tier repository; if it is rejected, use `gh pr merge <nr> --squash` once the gates are green.
+The PR still runs all five gates; confirm they are green after merging (or watch the follow-up
+checks). Green checks never replace reading the diff.
 
 [`.github/dependabot.yml`](.github/dependabot.yml) opens grouped weekly PRs for pip, GitHub
 Actions and the Docker digest. [`.github/workflows/dependabot-automerge.yml`](.github/workflows/dependabot-automerge.yml)
@@ -161,71 +158,62 @@ opts those PRs into auto-merge for **patch/minor** updates only (squash); majors
 
 ## Deployment
 
-The live service is <https://flop7-01ed.onrender.com> (free plan, Frankfurt; ephemeral DB).
+The live service is <https://gstavrooo.alwaysdata.net> (alwaysdata free Public Cloud plan, one
+*User program* site, Python 3.14 venv, its own SQLite file at `~/flop7/data/flop7.db`). Idle time is
+set to `0` in the site's advanced settings, so the process is not stopped for inactivity; HTTPS is
+forced by alwaysdata's wildcard certificate.
 
-[`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) runs on every push to `main`
-(Markdown-only changes are skipped via `paths-ignore: ["**.md"]`), on manual dispatch, and on a
-daily schedule at 05:23 UTC:
-
-```sh
-gh workflow run deploy.yml --ref main
-```
-
-The single job builds the image for `linux/amd64`, smoke-tests that exact image and Trivy-scans it
-via `scripts/test-image.sh`, pushes it to `ghcr.io/<owner>/flop7:<full-commit-sha>` with
-`packages: write`, then uses `scripts/render_deploy.py` to find-or-create the Render service
-(`flop7`, `free`, `frankfurt`, auto-deploy off), patch its image, trigger a deploy of exactly that
-tag and poll to `live`. Finally `scripts/smoke.sh` checks the public URL (health, frontend, create,
-403, 200, 409, SSE) and `scripts/prune_ghcr.py` prunes old images. Values move between steps via
-env/outputs, never interpolated into `run:`.
-
-Prerequisites (one-time, manual):
-
-1. A free Render account in the Frankfurt region.
-2. A Render API key with service read/write and registry-credential read access, stored as the
-   repository secret `RENDER_API_KEY` (verify with `gh secret list`).
-3. For the private GHCR image: a Render **Registry Credential** using a GitHub PAT with
-   `read:packages`. The deploy script picks the single GitHub credential automatically; if there
-   are several, set the repository variable `RENDER_REGISTRY_CREDENTIAL_ID`.
-4. If the API key sees several workspaces, set the repository variable `RENDER_OWNER_ID`.
-
-**Image retention:** GHCR keeps only the three newest SHA-tagged versions; the tag being deployed
-is always protected. This stays inside the ~500 MB free private-package allowance, and Render
-pulls the image on every deploy/restart, so older versions are never needed at runtime.
-
-## Parallel test on alwaysdata (branch `deploy/alwaysdata`)
-
-A second instance runs at <https://gstavrooo.alwaysdata.net> (free plan, one *User program* site,
-Python 3.14 venv, its own SQLite file at `~/flop7/data/flop7.db`). Render stays the production host;
-the two deployments share no database or URL.
-
-The site is created once in the alwaysdata admin. Code is shipped by
-[`.github/workflows/deploy-alwaysdata.yml`](.github/workflows/deploy-alwaysdata.yml), which runs **only**
-on manual dispatch — never on a push to `main`:
+[`.github/workflows/deploy-alwaysdata.yml`](.github/workflows/deploy-alwaysdata.yml) is the only
+deployment path and runs **only** on manual dispatch — never on a push to `main`:
 
 ```sh
-gh workflow run deploy-alwaysdata.yml --ref deploy/alwaysdata   # optional: -f ref=<branch-or-sha>
+gh workflow run deploy-alwaysdata.yml -R gstavrooo/flop7 -f ref=main   # optional: another branch/SHA
 ```
 
 The job checks out that ref, pulls it on the host over SSH, reinstalls the hashed runtime
-dependencies, restarts the site via `scripts/alwaysdata_deploy.py` and runs the same public smoke as
-Render. Secrets: `ALWAYS_DATA_API_KEY`, `ALWAYS_DATA_SSH_KEY`; variable `ALWAYS_DATA_ACCOUNT`.
-The account has a read-only GitHub deploy key for pulls and a 30-minute idle stop (the first request
-after idle restarts the process, like a Render cold start).
+dependencies, restarts the site via `scripts/alwaysdata_deploy.py` (alwaysdata API: find the site by
+address, `POST /site/<id>/restart/`, poll `/api/health`), then runs `scripts/smoke.sh` against the
+public URL. Secrets: `ALWAYS_DATA_API_KEY`, `ALWAYS_DATA_SSH_KEY`; variable `ALWAYS_DATA_ACCOUNT`.
+The repo has a read-only GitHub deploy key for remote pulls; the CI SSH key is stored as a secret.
+
+### Render (paused, setup retained)
+
+The former host <https://flop7-01ed.onrender.com> is no longer deployed to. The GHCR push, Render
+deploy, public smoke and image-prune steps in
+[`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) are disabled with `if: false`; the
+build and image-test steps still run on pushes to `main`. The Render service,
+`scripts/render_deploy.py` and the `RENDER_*` secrets/variables are deliberately kept so the setup
+can be reactivated without rebuilding it. The old Render instance may still answer with its last
+deployed snapshot, but it receives no updates and its ephemeral DB is unrelated to the live data.
+
+One-time prerequisites for the current host:
+
+1. An alwaysdata account on the free Public Cloud plan (1 GB disk, 256 MB RAM, non-commercial use,
+   only the account's own `*.alwaysdata.net` address — no custom domain and no Docker).
+2. SSH access with a key, a read-only GitHub deploy key on the private repo for `git pull`, and a
+   second SSH key for GitHub Actions stored as `ALWAYS_DATA_SSH_KEY`.
+3. An alwaysdata API token (requires 2FA) stored as `ALWAYS_DATA_API_KEY`; the account name is the
+   variable `ALWAYS_DATA_ACCOUNT`.
+4. The site itself is created once in the admin as type *User program* (the command runs uvicorn
+   from `.venv/bin/python` on `$IP`/`$PORT`), working directory `flop7`, `MIGRATE_ON_START=1`, HTTPS
+   forced and idle time `0`.
 
 ## Runbook
 
 ```sh
-gh run list --limit 10                       # recent CI / Deploy runs
-gh run view <id> --log-failed                # logs only when something is red
-gh workflow run deploy.yml --ref main        # deploy the current main now
-curl -fsS https://flop7-01ed.onrender.com/api/health
+gh run list --limit 10                                    # recent CI / Deploy runs
+gh run view <id> --log-failed                             # logs only when something is red
+gh workflow run deploy-alwaysdata.yml -f ref=main         # deploy current main to the live host
+curl -fsS https://gstavrooo.alwaysdata.net/api/health     # live health
+ssh gstavrooo@ssh-gstavrooo.alwaysdata.net 'tail -50 ~/admin/logs/sites/1108351.log'  # site log
 gitleaks detect --source=. --config=gitleaks.toml --no-banner   # full history (CI fetches all refs)
 ```
 
 - All gates are green on the tagged commit; the last public smoke passed against the live service.
-- No auto-rollback: diagnose the red run, fix forward and redeploy. Redeploying discards game data.
-- Rotate `RENDER_API_KEY` or the registry PAT in GitHub repository secrets if a credential leaks.
+- No auto-rollback: diagnose the red run, fix forward and redeploy. Redeploying does **not** clear
+  the alwaysdata DB; delete `~/flop7/data/flop7.db` deliberately if a reset is wanted.
+- Rotate `ALWAYS_DATA_API_KEY` or `ALWAYS_DATA_SSH_KEY` in GitHub secrets if a credential leaks.
+- The idle-time setting and the site/venv/DB live on the host, not in this repo.
 
 ## Security model
 
@@ -237,22 +225,22 @@ gitleaks detect --source=. --config=gitleaks.toml --no-banner   # full history (
 - All responses carry locked-down headers (`X-Content-Type-Options`, `Referrer-Policy`, strict CSP,
   frame-busting); HTML and static assets use revalidation so deploys appear without a hard reload.
 - No login and no privileged endpoints: knowing a game id only reveals that game's public view.
-- The SQLite file has no network exposure; the container runs as `nobody`, with `pip` removed and
-  hashed runtime dependencies only. No secrets, keys or credentials live in the repo — gitleaks
-  scans the whole history on every PR.
+- The SQLite file has no network exposure. The CI container runs as `nobody` with `pip` removed;
+  the live host runs the same hashed runtime dependencies in a per-account venv. No secrets, keys
+  or credentials live in the repo — gitleaks scans the whole history on every PR.
 
 ## Trade-offs
 
-- **Ephemeral data:** the Render free tier loses the filesystem on redeploy, restart or
-  scale-to-zero. Game data is not durable — a deliberate choice for zero-cost hosting.
-- **Cold starts:** after roughly 15 minutes idle the first request takes about a minute to wake
-  the instance. The SSE reconnect chip and automatic reconnect cover this gracefully.
+- **Durable data:** the SQLite file now lives in the alwaysdata account home, so game data survives
+  redeploys and restarts (the free plan includes 3-day backups). Delete it deliberately to reset.
+- **No cold start:** idle time is `0`, so the site is not stopped for inactivity; alwaysdata can
+  still restart processes during maintenance, and the SSE reconnect chip covers brief gaps.
 - **No auto-rollback:** a failed deploy leaves a red CI/CD run and a fix-forward commit; it never
-  silently reverts to an older image.
-- **Manual first deploy:** the service and registry credential were created once by hand via the
-  Render API/UI; only subsequent deploys are automated.
-- **Dependabot catch-up delay:** a bot merge deploys on the next 05:23 UTC scheduled run, so a
-  dependency bump can take up to ~24 h to reach production; dispatch the workflow to deploy now.
+  silently reverts an older version.
+- **Manual first deploy:** the alwaysdata site, venv, API token and SSH/deploy keys were created by
+  hand; only code deploys are automated. Pushes to `main` no longer deploy anywhere.
+- **Free-plan limits:** 1 GB disk, 256 MB RAM, ¼ CPU, one site at the account address, no Docker or
+  custom domain, non-commercial use; shared-host contention can still affect latency.
 - **SQLite + polling SSE:** version-checked writes and polling avoid queues and extra services at
   the cost of one request per viewer per second; bot decisions are driven by viewers' polls.
 - **Private-repo CI limits:** the free private tier cannot use branch-protection required checks or
@@ -263,11 +251,11 @@ gitleaks detect --source=. --config=gitleaks.toml --no-banner   # full history (
 - **Push instead of poll:** replace the one-poll-per-viewer SSE loop with a DB-notify mechanism
   (Postgres `LISTEN/NOTIFY` or a small pub/sub broker) and WebSockets; persist bot due times in a
   job table rather than relying on viewers' requests to drive moves.
-- **Durable storage:** move the single JSON column to managed Postgres with real backups/PITR and
-  put static assets on a CDN; keep Alembic as the schema gate. This removes the ephemeral-data and
-  cold-start trade-offs.
+- **Durable storage:** the SQLite file is now persistent on alwaysdata with short backups; at scale,
+  move the single JSON column to managed Postgres with PITR and put static assets on a CDN. Keep
+  Alembic as the schema gate.
 - **Horizontal scaling:** share state via the database/cache, add advisory locks for moves, and
-  make the container stateless (it already is).
+  keep the app stateless (it already is apart from the SQLite file).
 - **Hardening and observability:** signed, expiring invite tokens, rate limiting per id/IP,
   structured logs and metrics/alerting; upgrade image retention to a proper registry lifecycle.
 

@@ -14,9 +14,9 @@ sections 9.1 and 10 of `FLOP7-SPEC.md`.
 ## Workflow
 
 - Trunk-based: squash-merge only, linear history, no direct pushes to `main`.
-- After opening a PR, use `gh pr merge <nr> --auto --squash` to request auto-merge. This private
-  free-tier repo has `allow_auto_merge: false` and no required status checks, so the command completes
-  the squash merge immediately; verify the PR's CI is green afterwards instead of assuming it waited.
+- After opening a PR, use `gh pr merge <nr> --auto --squash` to request auto-merge. In this free-tier
+  repo GitHub does not always accept `--auto`; if it is rejected, use `gh pr merge <nr> --squash`
+  once the gates are green, then verify the PR's CI afterwards instead of assuming it waited.
 - Review means a human reads the diff before merging — or deliberately enables auto-merge.
   Green checks alone are not a review.
 - Fix or answer every review comment, then resolve it.

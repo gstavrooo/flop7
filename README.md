@@ -4,8 +4,8 @@ A browser-based, multi-player push-your-luck card game with live updates and per
 
 ## Status
 
-Complete and tagged `v1.0.0`; the repository is still **private**. The live service is
-<https://gstavrooo.alwaysdata.net>; the former Render deployment is **paused** (setup retained).
+Complete and tagged `v1.0.0`. The live service is <https://gstavrooo.alwaysdata.net>; the former
+Render deployment is **paused** (setup retained).
 The specification that drove the build (`FLOP7-SPEC.md`) and the phase prompts are kept on the
 owner's machine and are deliberately not part of this repository.
 
@@ -34,6 +34,8 @@ never grants control. No accounts, profiles, payments or chat.
 
 These follow the publisher's rules (opening deal, self-targeting, Second Chance ending the turn).
 The deliberate adaptations are **2–6 seats instead of 3–18** and the optional bot for solo play.
+Flop7 is an **unofficial, non-commercial fan adaptation** and is not affiliated with, endorsed by,
+or connected to the publisher of Flip 7.
 - **Bot:** optional, appended last, never sees the deck. On each of its turns it stays at ≥ 18
   points or ≥ 4 numbers (otherwise hits one card), targets the strongest opponent, and pauses a
   persisted 1.5 s between decisions so refreshes and multiple viewers cannot duplicate or skip a
@@ -148,7 +150,7 @@ desktop, no screenshots/traces), `lint` (ruff, shellcheck, actionlint, zizmor of
 
 Branches are trunk-based: squash-merge only, linear history, no direct pushes to `main`. PRs are
 merged with `gh pr merge <nr> --auto --squash`. GitHub does not always accept `--auto` in this free
-private-tier repository; if it is rejected, use `gh pr merge <nr> --squash` once the gates are green.
+tier repository; if it is rejected, use `gh pr merge <nr> --squash` once the gates are green.
 The PR still runs all five gates; confirm they are green after merging (or watch the follow-up
 checks). Green checks never replace reading the diff.
 
@@ -244,8 +246,9 @@ gitleaks detect --source=. --config=gitleaks.toml --no-banner   # full history (
   custom domain, non-commercial use; shared-host contention can still affect latency.
 - **SQLite + polling SSE:** version-checked writes and polling avoid queues and extra services at
   the cost of one request per viewer per second; bot decisions are driven by viewers' polls.
-- **Private-repo CI limits:** the free private tier cannot use branch-protection required checks or
-  GitHub's auto-merge setting, so merges rely on green gates plus an explicitly enabled auto-merge.
+- **Public-repo CI:** pull-request workflows use least-privilege tokens and never receive deploy
+  secrets; deploy workflows are `workflow_dispatch` only. Required status checks and branch
+  protection can be enabled once the repository is public.
 
 ## What I would change at scale
 
@@ -262,5 +265,5 @@ gitleaks detect --source=. --config=gitleaks.toml --no-banner   # full history (
 
 ## Licensing
 
-GPL-3.0 — see [`LICENSE`](LICENSE). The repository remains private; publishing is a separate,
-later decision.
+GPL-3.0 — see [`LICENSE`](LICENSE). The vendored QR generator is MIT-licensed (header in
+`app/static/qrcode.js`).

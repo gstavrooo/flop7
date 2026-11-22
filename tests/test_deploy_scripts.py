@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import base64
 import importlib.util
 from pathlib import Path
 from types import ModuleType
+from typing import Self
 
 import pytest
 
@@ -21,6 +23,7 @@ def load(name: str) -> ModuleType:
 
 render = load("render_deploy")
 prune = load("prune_ghcr")
+alwaysdata = load("alwaysdata_deploy")
 
 
 def test_find_service_handles_wrapped_list() -> None:
@@ -173,3 +176,84 @@ def test_deploy_workflow_go_live_triggers() -> None:
     assert 'paths-ignore: ["**.md"]' in workflow
     assert "workflow_dispatch:" in workflow
     assert '- cron: "23 5 * * *"' in workflow
+
+
+def test_alwaysdata_basic_auth() -> None:
+    header = alwaysdata.basic_auth("TOKEN", "gstavrooo")
+    decoded = base64.b64decode(header.removeprefix("Basic ")).decode("utf-8")
+    assert decoded == "TOKEN account=gstavrooo:"
+
+
+def test_alwaysdata_find_site_by_address() -> None:
+    sites = [
+        {"id": 1, "type": "php", "addresses": ["other.alwaysdata.net"]},
+        {"id": 2, "type": "user_program", "addresses": ["gstavrooo.alwaysdata.net"]},
+    ]
+    assert alwaysdata.find_site(sites, "gstavrooo.alwaysdata.net")["id"] == 2
+    assert alwaysdata.find_site({"results": sites}, "https://gstavrooo.alwaysdata.net/")["id"] == 2
+    assert alwaysdata.find_site(sites, "missing.alwaysdata.net") is None
+
+
+def test_alwaysdata_check_site_rejects_wrong_config() -> None:
+    alwaysdata.check_site({"type": "user_program", "signal_reload": None})
+    with pytest.raises(alwaysdata.AlwaysDataError, match="site type"):
+        alwaysdata.check_site({"type": "wsgi"})
+    with pytest.raises(alwaysdata.AlwaysDataError, match="hot restart"):
+        alwaysdata.check_site({"type": "user_program", "signal_reload": "SIGHUP"})
+
+
+def test_alwaysdata_service_url_requires_https() -> None:
+    assert alwaysdata.service_url("gstavrooo.alwaysdata.net") == "https://gstavrooo.alwaysdata.net"
+    assert alwaysdata.service_url("https://gstavrooo.alwaysdata.net/") == "https://gstavrooo.alwaysdata.net"
+    with pytest.raises(alwaysdata.AlwaysDataError, match="HTTPS"):
+        alwaysdata.service_url("http://gstavrooo.alwaysdata.net")
+
+
+class FakeResponse:
+    def __init__(self, body: bytes) -> None:
+        self.body = body
+
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(self, *_args: object) -> None:
+        return None
+
+    def read(self) -> bytes:
+        return self.body
+
+
+def test_alwaysdata_health_poll_succeeds_and_rejects_bad_json() -> None:
+    responses = [b'{"ok": false}', b'{"ok": true}']
+    calls: list[str] = []
+
+    def opener(url: str, _timeout: float) -> FakeResponse:
+        calls.append(url)
+        return FakeResponse(responses.pop(0))
+
+    url = "https://gstavrooo.alwaysdata.net"
+    alwaysdata.wait_for_health(url, max_polls=2, interval=1, sleep=lambda _: None, opener=opener)
+    assert calls == [f"{url}/api/health"] * 2
+    assert alwaysdata.probe_health(url, lambda _u, _t: FakeResponse(b"not json")) is False
+
+
+def test_alwaysdata_health_poll_times_out() -> None:
+    def opener(_url: str, _timeout: float) -> FakeResponse:
+        return FakeResponse(b'{"ok": false}')
+
+    with pytest.raises(alwaysdata.AlwaysDataError, match="did not become healthy"):
+        alwaysdata.wait_for_health(
+            "https://gstavrooo.alwaysdata.net",
+            max_polls=2,
+            interval=1,
+            sleep=lambda _: None,
+            opener=opener,
+        )
+
+
+def test_alwaysdata_workflow_is_dispatch_only() -> None:
+    """The parallel host must never deploy on a push to main."""
+    workflow = (SCRIPTS.parent / ".github/workflows/deploy-alwaysdata.yml").read_text(encoding="utf-8")
+    assert "workflow_dispatch:" in workflow
+    assert "branches: [main]" not in workflow
+    assert "ALWAYS_DATA_API_KEY" in workflow

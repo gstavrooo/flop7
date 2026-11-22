@@ -193,6 +193,26 @@ Prerequisites (one-time, manual):
 is always protected. This stays inside the ~500 MB free private-package allowance, and Render
 pulls the image on every deploy/restart, so older versions are never needed at runtime.
 
+## Parallel test on alwaysdata (branch `deploy/alwaysdata`)
+
+A second instance runs at <https://gstavrooo.alwaysdata.net> (free plan, one *User program* site,
+Python 3.14 venv, its own SQLite file at `~/flop7/data/flop7.db`). Render stays the production host;
+the two deployments share no database or URL.
+
+The site is created once in the alwaysdata admin. Code is shipped by
+[`.github/workflows/deploy-alwaysdata.yml`](.github/workflows/deploy-alwaysdata.yml), which runs **only**
+on manual dispatch — never on a push to `main`:
+
+```sh
+gh workflow run deploy-alwaysdata.yml --ref deploy/alwaysdata   # optional: -f ref=<branch-or-sha>
+```
+
+The job checks out that ref, pulls it on the host over SSH, reinstalls the hashed runtime
+dependencies, restarts the site via `scripts/alwaysdata_deploy.py` and runs the same public smoke as
+Render. Secrets: `ALWAYS_DATA_API_KEY`, `ALWAYS_DATA_SSH_KEY`; variable `ALWAYS_DATA_ACCOUNT`.
+The account has a read-only GitHub deploy key for pulls and a 30-minute idle stop (the first request
+after idle restarts the process, like a Render cold start).
+
 ## Runbook
 
 ```sh

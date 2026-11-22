@@ -224,21 +224,23 @@ class FakeResponse:
 
 
 def test_alwaysdata_health_poll_succeeds_and_rejects_bad_json() -> None:
+    """The opener must receive timeout as a keyword: urlopen's second positional arg is data."""
     responses = [b'{"ok": false}', b'{"ok": true}']
     calls: list[str] = []
 
-    def opener(url: str, _timeout: float) -> FakeResponse:
+    def opener(url: str, *, timeout: float) -> FakeResponse:
+        assert timeout == 10
         calls.append(url)
         return FakeResponse(responses.pop(0))
 
     url = "https://gstavrooo.alwaysdata.net"
     alwaysdata.wait_for_health(url, max_polls=2, interval=1, sleep=lambda _: None, opener=opener)
     assert calls == [f"{url}/api/health"] * 2
-    assert alwaysdata.probe_health(url, lambda _u, _t: FakeResponse(b"not json")) is False
+    assert alwaysdata.probe_health(url, lambda _u, *, timeout: FakeResponse(b"not json")) is False
 
 
 def test_alwaysdata_health_poll_times_out() -> None:
-    def opener(_url: str, _timeout: float) -> FakeResponse:
+    def opener(_url: str, *, timeout: float) -> FakeResponse:
         return FakeResponse(b'{"ok": false}')
 
     with pytest.raises(alwaysdata.AlwaysDataError, match="did not become healthy"):

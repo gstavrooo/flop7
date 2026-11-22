@@ -18,7 +18,7 @@ from collections.abc import Callable
 from typing import Any
 
 Api = Callable[[str, str, dict[str, Any] | None], Any]
-Opener = Callable[[str, float], Any]
+Opener = Callable[..., Any]
 
 DEFAULT_API_BASE = "https://api.alwaysdata.com/v1"
 SITE_TYPE = "user_program"
@@ -114,7 +114,7 @@ def service_url(address: str) -> str:
 def probe_health(url: str, opener: Opener = urllib.request.urlopen) -> bool:
     """One GET of /api/health; any transport or JSON error means 'not healthy yet'."""
     try:
-        with opener(f"{url}/api/health", 10) as response:
+        with opener(f"{url}/api/health", timeout=10) as response:
             payload = json.loads(response.read().decode("utf-8"))
     except OSError, ValueError:
         return False

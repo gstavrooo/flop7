@@ -253,11 +253,14 @@ def test_alwaysdata_health_poll_times_out() -> None:
         )
 
 
-def test_alwaysdata_workflow_is_dispatch_only() -> None:
-    """The live host must never deploy on a push to main."""
+def test_alwaysdata_workflow_follows_main_automatically() -> None:
+    """Every merge to main deploys; manual dispatch and daily catch-up remain."""
     workflow = (SCRIPTS.parent / ".github/workflows/deploy-alwaysdata.yml").read_text(encoding="utf-8")
+    assert "branches: [main]" in workflow
+    assert 'paths-ignore: ["**.md"]' in workflow
+    assert '- cron: "23 5 * * *"' in workflow
     assert "workflow_dispatch:" in workflow
-    assert "branches: [main]" not in workflow
+    assert "ref: ${{ inputs.ref || github.sha }}" in workflow
     assert "ALWAYS_DATA_API_KEY" in workflow
 
 

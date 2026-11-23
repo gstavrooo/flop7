@@ -425,19 +425,20 @@
   }
 
   function renderTopbar() {
-    const mode = Theme.get();
-    const suffix = mode === "auto" ? "Auto" : mode === "light" ? "Light" : "Dark";
-    const themeLabel = t("nav.theme" + suffix);
-    els.btnTheme.textContent = mode === "auto" ? "◐" : mode === "light" ? "☀" : "☾";
+    const light = Theme.get() === "light";
+    const themeKey = light ? "nav.themeLight" : "nav.themeDark";
+    const themeLabel = t(themeKey);
+    els.btnTheme.querySelector(".btn-icon").textContent = light ? "☀️" : "🌙";
     els.btnTheme.setAttribute("aria-label", themeLabel);
     els.btnTheme.setAttribute("title", themeLabel);
-    const soundLabel = t(soundOn ? "nav.soundOn" : "nav.soundOff");
-    // One monochrome glyph set for all toolbar buttons; muting is shown by the
-    // struck-through note, not by switching to a coloured emoji.
-    els.btnSound.classList.toggle("is-muted", !soundOn);
+    els.btnTheme.setAttribute("data-i18n-title", themeKey);
+    const soundKey = soundOn ? "nav.soundOn" : "nav.soundOff";
+    const soundLabel = t(soundKey);
+    els.btnSound.querySelector(".btn-icon").textContent = soundOn ? "🔊" : "🔇";
     els.btnSound.setAttribute("aria-pressed", soundOn ? "true" : "false");
     els.btnSound.setAttribute("aria-label", soundLabel);
     els.btnSound.setAttribute("title", soundLabel);
+    els.btnSound.setAttribute("data-i18n-title", soundKey);
   }
 
   function updatePreview() {

@@ -3,7 +3,7 @@
 #   python -m piptools compile --generate-hashes --allow-unsafe --no-strip-extras -o requirements-dev.txt requirements-dev.in
 -r requirements.txt
 pytest==9.2.0
-ruff==0.17.5
+ruff==0.17.6
 pip-tools==7.7.0
 playwright==1.65.2
 httpx==0.28.1  # Starlette TestClient (API tests)

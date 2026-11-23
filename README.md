@@ -80,15 +80,15 @@ and stale clients harmless (409 → reload).
 flowchart TD
   PR["Pull request"] --> CI["CI: test · container-test · browser-test<br/>lint · gitleaks (full history)"]
   CI -->|"green gates + squash merge"| MAIN["main"]
-  MAIN -->|"push · daily 05:23 UTC · manual dispatch"| IMAGE["deploy.yml: build + test the SHA-tagged image<br/>GHCR/Render/smoke/prune steps paused"]
-  OPS["Manual dispatch of deploy-alwaysdata.yml"] --> PULL["SSH: pull chosen ref, install hashed deps"]
+  MAIN -->|"push · daily 05:23 UTC"| IMAGE["deploy.yml: build + test the SHA-tagged image<br/>GHCR/Render/smoke/prune steps paused"]
+  MAIN -->|"push · daily 05:23 UTC · manual dispatch"| PULL["deploy-alwaysdata.yml: SSH pull exact ref, install hashed deps"]
   PULL --> RESTART["alwaysdata API: restart site, poll /api/health"]
   RESTART --> SMOKE["Public URL smoke: health, UI, 403, 200, 409, SSE"]
 ```
 
-Pushes to `main` still build and test the container image; they do **not** deploy to any host.
-Going live is an explicit `workflow_dispatch` of `deploy-alwaysdata.yml` with the desired ref.
-A failed public smoke leaves a red run — the fix is a new commit, never an automatic rollback.
+Every merge to `main` deploys the exact merged commit to alwaysdata automatically; the daily
+05:23 UTC run catches Dependabot merges, which fire no push event. Manual dispatch redeploys `main`
+or another ref. A failed public smoke leaves a red run — the fix is a new commit, never an automatic rollback.
 
 ## Local development
 
@@ -166,7 +166,8 @@ set to `0` in the site's advanced settings, so the process is not stopped for in
 forced by alwaysdata's wildcard certificate.
 
 [`.github/workflows/deploy-alwaysdata.yml`](.github/workflows/deploy-alwaysdata.yml) is the only
-deployment path and runs **only** on manual dispatch — never on a push to `main`:
+deployment path. It runs on every push to `main` (docs-only changes excluded), daily at 05:23 UTC
+as a Dependabot catch-up, and on manual dispatch for ad-hoc refs:
 
 ```sh
 gh workflow run deploy-alwaysdata.yml -R gstavrooo/flop7 -f ref=main   # optional: another branch/SHA
@@ -206,7 +207,7 @@ One-time prerequisites for the current host:
 ```sh
 gh run list --limit 10                                    # recent CI / Deploy runs
 gh run view <id> --log-failed                             # logs only when something is red
-gh workflow run deploy-alwaysdata.yml -f ref=main         # deploy current main to the live host
+gh workflow run deploy-alwaysdata.yml -f ref=main         # manual redeploy / ad-hoc ref
 curl -fsS https://gstavrooo.alwaysdata.net/api/health     # live health
 ssh gstavrooo@ssh-gstavrooo.alwaysdata.net 'tail -50 ~/admin/logs/sites/1108351.log'  # site log
 gitleaks detect --source=. --config=gitleaks.toml --no-banner   # full history (CI fetches all refs)
@@ -244,14 +245,15 @@ gitleaks detect --source=. --config=gitleaks.toml --no-banner   # full history (
 - **No auto-rollback:** a failed deploy leaves a red CI/CD run and a fix-forward commit; it never
   silently reverts an older version.
 - **Manual first deploy:** the alwaysdata site, venv, API token and SSH/deploy keys were created by
-  hand; only code deploys are automated. Pushes to `main` no longer deploy anywhere.
+  hand; code deploys then follow every merge to `main` automatically.
 - **Free-plan limits:** 1 GB disk, 256 MB RAM, ¼ CPU, one site at the account address, no Docker or
   custom domain, non-commercial use; shared-host contention can still affect latency.
 - **SQLite + polling SSE:** version-checked writes and polling avoid queues and extra services at
   the cost of one request per viewer per second; bot decisions are driven by viewers' polls.
 - **Public-repo CI:** pull-request workflows use least-privilege tokens and never receive deploy
-  secrets; deploy workflows are `workflow_dispatch` only. Required status checks and branch
-  protection can be enabled once the repository is public.
+  secrets; deploy workflows run only on trusted `main` pushes, the daily schedule or manual
+  dispatch, never on pull requests. Required status checks and branch protection can be enabled
+  once the repository is public.
 
 ## What I would change at scale
 

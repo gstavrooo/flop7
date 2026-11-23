@@ -3,7 +3,7 @@ name: Deploy
 # Render deployment is paused: the GHCR/Render/smoke/prune steps below are
 # guarded by RENDER_DEPLOY_ENABLED=false but kept intact so setting that
 # variable to 'true' reactivates them. The live host is alwaysdata via
-# deploy-alwaysdata.yml (manual dispatch only).
+# deploy-alwaysdata.yml (automatic on every merge to main).
 # Spec 9.2: go-live triggers. `push` deploys every merge to main; the daily
 # 05:23 UTC schedule catches Dependabot bot merges, which fire no push event.
 on:

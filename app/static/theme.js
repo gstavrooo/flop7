@@ -49,20 +49,28 @@
 
   window.Flop7Storage = Storage;
 
-  const MODES = ["auto", "light", "dark"];
+  const MODES = ["light", "dark"];
   let mode = Storage.get("theme");
-  if (MODES.indexOf(mode) === -1) mode = "auto";
+  // The old third mode ("auto") is migrated once to the current system setting;
+  // from then on the stored preference is always explicit light or dark.
+  if (mode === "auto") mode = null;
+  if (MODES.indexOf(mode) === -1) {
+    mode = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches
+      ? "dark" : "light";
+  }
 
   function apply(next) {
+    if (MODES.indexOf(next) === -1) next = "light";
     mode = next;
-    if (next === "auto") document.documentElement.removeAttribute("data-theme");
-    else document.documentElement.setAttribute("data-theme", next);
+    document.documentElement.setAttribute("data-theme", next);
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute("content", next === "dark" ? "#14130f" : "#f4f1e8");
     Storage.set("theme", next);
     document.dispatchEvent(new CustomEvent("flop7:themechange", { detail: { theme: next } }));
   }
 
   function cycle() {
-    apply(mode === "auto" ? "light" : mode === "light" ? "dark" : "auto");
+    apply(mode === "light" ? "dark" : "light");
   }
 
   // The language attribute is set here too so it is correct before first paint;
@@ -70,7 +78,7 @@
   const lang = Storage.get("language");
   if (lang === "en" || lang === "de") document.documentElement.lang = lang;
 
-  if (mode !== "auto") document.documentElement.setAttribute("data-theme", mode);
+  apply(mode); // set data-theme before first paint and persist any migration
 
   window.Flop7Theme = Object.freeze({
     get: function () { return mode; },

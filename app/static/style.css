@@ -30,22 +30,6 @@
   background: var(--paper);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --paper: #1b1a17;
-    --ink: #f5f2e9;
-    --surface: #262421;
-    --muted: #d8d2c2;
-    --dot: #4a463d;   /* dark paper texture, deliberately darker than text */
-    --border: #000000;
-    --shadow: #000000;
-    --line: #c9c2b2;
-    --edge-shadow: #6b6457;
-    --progress-line: #c9c2b2;
-    color-scheme: dark;
-  }
-}
-
 :root[data-theme="light"] {
   --paper: #f4f1e8;
   --ink: #111111;
@@ -76,10 +60,18 @@
 
 * { box-sizing: border-box; }
 
+/* App shell: the page itself never scrolls. The topbar and dock are pinned
+ * flex children; only .main scrolls when a game really needs more room.
+ * dvh keeps the dock above Firefox Android's collapsing address bar. */
+html { height: 100%; }
+
 body {
   margin: 0;
-  min-height: 100vh;
-  padding-bottom: calc(var(--dock-height) + 20px); /* room for the pinned dock */
+  height: 100vh;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   color: var(--ink);
   background-color: var(--paper);
   background-image: radial-gradient(var(--dot) 1px, transparent 1px);
@@ -161,12 +153,10 @@ button { font-family: inherit; }
   animation: spinner-turn 0.8s linear infinite;
 }
 @keyframes spinner-turn { to { transform: rotate(360deg); } }
-body.is-loading { overflow: hidden; }
 
 /* ---------- topbar (6.3) ---------- */
 .topbar {
-  position: sticky;
-  top: 0;
+  flex: none;
   z-index: 20;
   display: flex;
   align-items: center;
@@ -206,8 +196,11 @@ body.is-loading { overflow: hidden; }
 .icon-btn {
   width: 42px;
   height: 42px;
-  display: grid;
-  place-items: center;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
   font-size: 20px;
   line-height: 1;
   color: var(--ink); /* readable on --surface in both themes */
@@ -217,7 +210,17 @@ body.is-loading { overflow: hidden; }
   cursor: pointer;
 }
 
-.icon-btn.is-muted { text-decoration: line-through; opacity: 0.65; }
+/* Emoji glyphs have uneven font metrics; a full-size flex box centres each
+ * one on both axes instead of relying on the text baseline. */
+.btn-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  font-size: 20px;
+  line-height: 1;
+}
 .icon-btn:hover { transform: translate(-1px, -1px); box-shadow: 4px 4px 0 var(--edge-shadow); }
 .icon-btn:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--edge-shadow); }
 
@@ -231,7 +234,15 @@ body.is-loading { overflow: hidden; }
   font-weight: bold;
 }
 
-.main { max-width: 900px; margin: 0 auto; padding: 24px 16px; }
+.main {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  width: 100%;
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 24px 16px;
+}
 .screen-title { font-size: 30px; margin: 0 0 6px; }
 .hint { color: var(--muted); margin: 0 0 18px; }
 
@@ -487,10 +498,7 @@ body.is-loading { overflow: hidden; }
 
 /* ---------- dock (6.5): fixed height, never jumps ---------- */
 .dock {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  flex: none;
   z-index: 30;
   height: var(--dock-height);
   padding: 10px 16px 0;
@@ -526,8 +534,7 @@ body.is-loading { overflow: hidden; }
   to { transform: translateX(320%); }
 }
 
-/* On the setup screen the dock only holds the start button: do not reserve 200px. */
-body.is-setup { padding-bottom: 110px; }
+/* On the setup screen the dock only holds the start button: no fixed height. */
 body.is-setup .dock { height: auto; min-height: 0; padding-bottom: 12px; }
 
 /* ---------- toast + connection chip (6.6) ---------- */
@@ -643,15 +650,37 @@ body.is-setup .dock { height: auto; min-height: 0; padding-bottom: 12px; }
   .tagline { display: none; }
   .wordmark { font-size: 21px; }
   .topbar { padding: 8px 10px; }
-  .icon-btn { width: 44px; height: 44px; font-size: 18px; }
-  .main { padding: 16px 12px; }
-  .players { grid-template-columns: 1fr; }
-  .dock { padding: 8px 12px 0; }
+  .icon-btn { width: 44px; height: 44px; }
+  .btn-icon { font-size: 18px; }
+  .main { padding: 8px; }
+  /* Two compact columns keep a whole table on screen instead of a long scroll. */
+  .players { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .dock { padding: 6px 8px 0; }
   .dock-prompt { font-size: 14px; min-height: 2.2em; }
   .dock .btn { flex: 1 1 auto; }
-  .waiting-bar { margin-left: -12px; margin-right: -12px; }
-  .player-card { min-height: 230px; padding: 10px; }
-  .player-name { font-size: 15px; }
+  .waiting-bar { margin-left: -8px; margin-right: -8px; }
+  .screen-title { font-size: 24px; }
+  .player-card { min-height: 0; padding: 8px; }
+  .player-name { font-size: 13px; margin-bottom: 2px; }
+  .player-line { font-size: 11px; margin: 1px 0; }
+  .player-score { font-size: 18px; margin: 2px 0 0; }
+  .player-total { font-size: 10px; margin: 0 0 2px; }
+  /* Keep the tap hint for screen readers, but spend no vertical space on it. */
+  .cards-hint {
+    position: absolute;
+    width: 1px; height: 1px;
+    padding: 0; margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .progress { margin: 4px 0; }
+  .progress-step { width: 11px; height: 7px; }
+  .player-status { min-height: 22px; margin-top: 2px; gap: 4px; }
+  .status-badge, .target-flag, .second-flag { font-size: 10px; padding: 2px 5px; }
+  .cards { min-height: 36px; margin-top: 4px; gap: 4px; }
+  .card { min-width: 30px; min-height: 30px; padding: 3px 5px; }
+  .deal-hint { margin-top: 6px; min-height: 28px; padding: 5px 8px; font-size: 11px; }
   .dialog { padding: 14px; }
   #invite-dialog { width: calc(100vw - 20px); }
   .dialog-actions { flex-wrap: wrap; }
@@ -666,7 +695,8 @@ body.is-setup .dock { height: auto; min-height: 0; padding-bottom: 12px; }
 @media (max-height: 560px) {
   :root { --dock-height: 140px; }
   .topbar { padding: 6px 10px; }
-  .icon-btn { width: 44px; height: 44px; font-size: 16px; }
+  .icon-btn { width: 44px; height: 44px; }
+  .btn-icon { font-size: 16px; }
   .dock { padding-top: 6px; }
   .dock-prompt { min-height: 1.6em; margin: 4px 0; font-size: 14px; }
   .dialog { max-height: 92vh; }

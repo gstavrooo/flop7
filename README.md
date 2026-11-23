@@ -135,7 +135,7 @@ The frontend at `/` is a single page: create a game (optionally hot-seat and/or 
 hand out the per-seat invite links from the Invite dialog. Invite tokens travel only in the URL
 fragment, which the app strips from the address bar after reading; tokens for "your" seats persist
 in namespaced local storage and degrade to session-only if storage is blocked or corrupt.
-Language (de/en), theme (auto/light/dark) and sound are global preferences, persisted and applied
+Language (de/en), theme (light/dark) and sound are global preferences, persisted and applied
 before first paint. Keyboard shortcuts: `H`/`Space` hit, `S` stay, `1..6` choose a target, `?`
 opens the rules; shortcuts are ignored in inputs, textareas and open dialogs.
 

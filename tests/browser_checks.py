@@ -427,17 +427,38 @@ def test_language_theme_and_rules_round_trip(r: Runner) -> None:
         assert page.evaluate("() => document.documentElement.lang") == "en"
         assert page.locator("#setup-title").inner_text() == "New game"
 
-        page.locator("#btn-theme").click()  # auto -> light
+        # Only two modes now: the toggle alternates light and dark forever.
+        page.evaluate("() => Flop7Theme.set('light')")
         assert page.evaluate("() => document.documentElement.dataset.theme") == "light"
         page.locator("#btn-theme").click()  # light -> dark
         assert page.evaluate("() => document.documentElement.dataset.theme") == "dark"
-        page.locator("#btn-theme").click()  # dark -> auto
-        assert page.evaluate("() => !document.documentElement.hasAttribute('data-theme')")
+        page.locator("#btn-theme").click()  # dark -> light
+        assert page.evaluate("() => document.documentElement.dataset.theme") == "light"
+        assert page.locator("#btn-theme .btn-icon").inner_text().strip() == "☀️"
 
         page.keyboard.press("?")
         page.wait_for_selector("#rules-dialog[open]")
         page.locator("#rules-dialog .dialog-close").click()
         assert page.locator("#rules-dialog").is_hidden()
+
+
+def test_legacy_auto_theme_migrates_to_an_explicit_mode(r: Runner) -> None:
+    """The removed third mode must not survive a reload as 'auto' (spec 6.8)."""
+    with r.page() as page:
+        page.goto(r.base_url + "/")
+        r.ready(page)
+        page.evaluate("() => localStorage.setItem('flop7:v1:theme', JSON.stringify({value: 'auto'}))")
+        page.reload()
+        r.ready(page)
+        mode = page.evaluate("() => Flop7Theme.get()")
+        assert mode in ("light", "dark"), mode
+        assert page.evaluate("() => document.documentElement.dataset.theme") == mode
+        stored = page.evaluate("() => JSON.parse(localStorage.getItem('flop7:v1:theme')).value")
+        assert stored == mode, stored
+        # Invalid values degrade to light instead of an unthemed third state.
+        page.evaluate("() => Flop7Theme.set('auto')")
+        assert page.evaluate("() => Flop7Theme.get()") == "light"
+        assert page.evaluate("() => Flop7Theme.get()") != "auto"
 
 
 def test_rules_are_grouped_and_translated(r: Runner) -> None:
@@ -966,8 +987,19 @@ def test_mobile_layout_fits_portrait_and_landscape(r: Runner) -> None:
             dock = page.locator("#dock").bounding_box()
             assert dock and dock["y"] >= 0, f"dock off screen at {viewport}"
             assert abs(dock["y"] + dock["height"] - viewport["height"]) <= 1
-            padding = page.evaluate("() => parseFloat(getComputedStyle(document.body).paddingBottom)")
-            assert padding >= dock["height"] + 15, "body padding no longer clears the dock"
+            # The page itself never scrolls; only .main may scroll internally.
+            metrics = page.evaluate(
+                """() => ({
+                     doc: document.documentElement.scrollHeight,
+                     body: document.body.scrollHeight,
+                     win: window.innerHeight,
+                     overflow: getComputedStyle(document.body).overflowY,
+                     main: getComputedStyle(document.querySelector('.main')).overflowY
+                   })"""
+            )
+            assert metrics["doc"] <= metrics["win"] + 1, f"page scrolls vertically: {metrics}"
+            assert metrics["body"] <= metrics["win"] + 1, f"body scrolls vertically: {metrics}"
+            assert metrics["overflow"] == "hidden" and metrics["main"] == "auto", metrics
             if viewport["height"] <= 560:
                 assert dock["height"] <= 160, f"short viewport dock too tall: {dock['height']}"
 
@@ -976,6 +1008,39 @@ def test_mobile_layout_fits_portrait_and_landscape(r: Runner) -> None:
             dialog = page.locator("#rules-dialog").bounding_box()
             assert dialog and 0 <= dialog["x"] and dialog["x"] + dialog["width"] <= viewport["width"] + 1
             assert dialog["height"] <= viewport["height"] * 0.93, f"rules dialog too tall: {dialog}"
+
+
+def test_mobile_table_fits_without_any_scrolling(r: Runner) -> None:
+    """A normal phone game shows every seat at once; no page or table scroll."""
+    for names in (
+        ("Ann", "Bob", "Chris", "Dana"),
+        ("Ann", "Bob", "Chris", "Dana", "Emi", "Finn"),
+    ):
+        view = r.create(names)
+        state = r.clean(view["id"])
+        for player in state["players"]:
+            player["numbers"] = [5]
+        r.store(view["id"], state)
+        with r.page(MOBILE) as page:
+            r.join(page, view, 0)
+            page.wait_for_selector("#players .player-card")
+            assert page.locator(".player-card").count() == len(names)
+            metrics = page.evaluate(
+                """() => {
+                     const main = document.querySelector('.main');
+                     const cards = [...document.querySelectorAll('.player-card')]
+                       .map(c => c.getBoundingClientRect());
+                     return {
+                       pageExtra: document.documentElement.scrollHeight - window.innerHeight,
+                       mainExtra: main.scrollHeight - main.clientHeight,
+                       lastBottom: Math.max(...cards.map(c => c.bottom)),
+                       dockTop: document.querySelector('#dock').getBoundingClientRect().top
+                     };
+                   }"""
+            )
+            assert metrics["pageExtra"] <= 1, metrics
+            assert metrics["mainExtra"] <= 1, f"table needs scrolling: {metrics}"
+            assert metrics["lastBottom"] <= metrics["dockTop"] + 1, metrics
 
 
 def test_copy_feedback_stays_inside_invite_dialog(r: Runner) -> None:
@@ -1098,15 +1163,30 @@ def test_keyboard_shortcuts_and_guards(r: Runner) -> None:
 
 
 def test_topbar_icon_labels_and_sound_pressed(r: Runner) -> None:
-    """AC-15: icon-only buttons, translated aria-labels and sound aria-pressed."""
+    """AC-15: centred emoji buttons, translated aria-labels, sound aria-pressed."""
+    icons = {"📖", "🌐", "🔊", "🔇", "☀️", "🌙", "🔄"}
     with r.page() as page:
         page.goto(r.base_url + "/")
         r.ready(page)
-        for selector in ("#btn-rules", "#btn-language", "#btn-sound", "#btn-theme"):
+        selectors = ("#btn-rules", "#btn-language", "#btn-sound", "#btn-theme", "#btn-new-game")
+        for selector in selectors:
             button = page.locator(selector)
             assert button.get_attribute("aria-label")
             assert button.get_attribute("title")
-            assert button.inner_text().strip() in {"?", "文", "♪", "◐", "☀", "☾", "↺"}
+            assert button.text_content().strip() in icons, (selector, button.text_content())
+        # Each emoji must be centred on both axes inside its square button.
+        offsets = page.evaluate(
+            """() => ['#btn-rules', '#btn-language', '#btn-sound', '#btn-theme']
+                 .map(s => {
+                   const box = document.querySelector(s).getBoundingClientRect();
+                   const icon = document.querySelector(s + ' .btn-icon').getBoundingClientRect();
+                   return {
+                     dx: (icon.left + icon.width / 2) - (box.left + box.width / 2),
+                     dy: (icon.top + icon.height / 2) - (box.top + box.height / 2)
+                   };
+                 })"""
+        )
+        assert all(abs(o["dx"]) <= 1 and abs(o["dy"]) <= 1 for o in offsets), offsets
         backgrounds = page.evaluate(
             """() => ['#btn-rules', '#btn-language', '#btn-sound', '#btn-theme']
                  .map(s => getComputedStyle(document.querySelector(s)).backgroundColor)"""
@@ -1114,8 +1194,10 @@ def test_topbar_icon_labels_and_sound_pressed(r: Runner) -> None:
         assert len(set(backgrounds)) == 1, f"sound button looks different from the others: {backgrounds}"
         sound = page.locator("#btn-sound")
         assert sound.get_attribute("aria-pressed") == "true"
+        assert sound.inner_text().strip() == "🔊"
         sound.click()
         assert sound.get_attribute("aria-pressed") == "false"
+        assert sound.inner_text().strip() == "🔇"
         assert "aus" in sound.get_attribute("aria-label").lower() or "off" in (
             sound.get_attribute("aria-label").lower()
         )

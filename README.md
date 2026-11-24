@@ -104,9 +104,9 @@ Run every check locally:
 ```sh
 .venv/bin/ruff check .
 .venv/bin/ruff format --check .
-.venv/bin/python -m pytest -q                        # 86 tests
+.venv/bin/python -m pytest -q                        # full backend suite
 .venv/bin/python -m playwright install chromium      # once
-.venv/bin/python tests/browser_checks.py             # 43 named scenarios, ~25 s
+.venv/bin/python tests/browser_checks.py             # browser regressions
 ```
 
 After editing a `*.in` file, recompile both lockfiles (runtime first — the dev file includes it):
@@ -209,7 +209,7 @@ gh run list --limit 10                                    # recent CI / Deploy r
 gh run view <id> --log-failed                             # logs only when something is red
 gh workflow run deploy-alwaysdata.yml -f ref=main         # manual redeploy / ad-hoc ref
 curl -fsS https://gstavrooo.alwaysdata.net/api/health     # live health
-ssh gstavrooo@ssh-gstavrooo.alwaysdata.net 'tail -50 ~/admin/logs/sites/1108351.log'  # site log
+ssh gstavrooo@ssh-gstavrooo.alwaysdata.net 'tail -50 ~/admin/logs/sites/<site-id>.log'  # site log (id in the admin)
 gitleaks detect --source=. --config=gitleaks.toml --no-banner   # full history (CI fetches all refs)
 ```
 

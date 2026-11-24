@@ -1,12 +1,13 @@
 # Auto-detected by gitleaks-action. Keep the default rules and allow only the
-# one deliberate, non-secret literal used by the deploy smoke script to assert
-# a 403 for a foreign seat token (false positive: curl-auth-header).
+# deliberate, non-secret "foreign token" literals in the deploy smoke script that
+# assert a 403 (false positive: curl-auth-header). The old literal survives in
+# historical commits, which the gitleaks job scans in full, so keep both spellings.
 [extend]
 useDefault = true
 
 [[allowlists]]
-description = "Deliberately invalid seat token in the deploy smoke script (asserts a 403)"
-# `condition = and` here means: only this file AND this exact literal are ignored.
+description = "Deliberately invalid seat tokens in the deploy smoke script (asserts a 403)"
+# `condition = and` here means: only this file AND one of these literals are ignored.
 condition = "and"
 paths = ['''scripts/smoke.sh''']
-regexes = ['''not-a-seat-token''']
+regexes = ['''not-a-seat-token|wrong-token''']
